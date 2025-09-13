@@ -6,12 +6,61 @@ app = Flask(__name__)
 @app.route("/", methods=["GET"])
 def index():
     return """
-    <h2>MCQ Converter</h2>
-    <form method="post" action="/convert" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".txt">
-        <br><br>
-        <input type="submit" value="Upload & Convert">
-    </form>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>MCQ Converter</title>
+        <style>
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                font-family: Arial, sans-serif;
+                background: #f4f6f9;
+                margin: 0;
+            }
+            .container {
+                text-align: center;
+                background: white;
+                padding: 40px;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                width: 400px;
+            }
+            h2 {
+                margin-bottom: 20px;
+                color: #333;
+            }
+            input[type=file] {
+                margin: 20px 0;
+                font-size: 16px;
+            }
+            input[type=submit] {
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                font-size: 16px;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            input[type=submit]:hover {
+                background: #0056b3;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>📘 MCQ to Excel Converter</h2>
+            <form method="post" action="/convert" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".txt">
+                <br>
+                <input type="submit" value="Upload & Convert">
+            </form>
+        </div>
+    </body>
+    </html>
     """
 
 @app.route('/convert', methods=['POST'])
@@ -19,24 +68,46 @@ def convert():
     file = request.files['file']
     text = file.read().decode('utf-8')
 
-    # Pattern to capture: Qn, options a-d, and answer like "1.C"
-    pattern = re.compile(
-        r'(\d+)\.(.*?)\n\s*a\)(.*?)\n\s*b\)(.*?)\n\s*c\)(.*?)\n\s*d\)(.*?)\n\s*\d+\.\s*([A-D])',
-        re.DOTALL | re.IGNORECASE
-    )
+    # Split by question numbers (e.g., 1., 2., 3.)
+    blocks = re.split(r'\n(?=\d+\.)', text)
 
-    matches = pattern.findall(text)
+    rows = []
 
     def ans_to_num(ans):
         return {"A": 1, "B": 2, "C": 3, "D": 4}.get(ans.upper(), "")
 
-    rows = []
-    for qno, qtext, opt_a, opt_b, opt_c, opt_d, ans_letter in matches:
-        # Build question string including options
-        question_full = f"{qtext.strip()}\nA) {opt_a.strip()}\nB) {opt_b.strip()}\nC) {opt_c.strip()}\nD) {opt_d.strip()}"
-        rows.append([1, question_full, "A", "B", "C", "D", ans_to_num(ans_letter)])
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        match_q = re.match(r'(\d+)\.(.*)', block, re.DOTALL)
+        if not match_q:
+            continue
+
+        qnum, rest = match_q.groups()
+
+        # Extract options a–d
+        options = re.findall(r'([a-d])\)(.*?)(?=\n[a-d]\)|\n\d+\.|$)', rest, re.DOTALL | re.IGNORECASE)
+        opts = {k.lower(): v.strip() for k, v in options}
+
+        # Find answer like "1.C"
+        ans_match = re.search(rf'{qnum}\.\s*([A-D])', block)
+        ans = ans_match.group(1) if ans_match else ""
+
+        # Build full question text
+        qtext_only = re.split(r'\na\)', rest, 1)[0].strip()
+        question_full = qtext_only
+        for letter in ['a', 'b', 'c', 'd']:
+            if letter in opts:
+                question_full += f"\n{letter.upper()}) {opts[letter]}"
+
+        rows.append([1, question_full, "A", "B", "C", "D", ans_to_num(ans)])
 
     df = pd.DataFrame(rows, columns=["1", "Question", "A", "B", "C", "D", "Correct Answer"])
+
+    # Log number of parsed questions (useful in Koyeb logs)
+    print(f"✅ Parsed {len(rows)} questions")
 
     output = io.BytesIO()
     df.to_excel(output, index=False)
