@@ -53,59 +53,81 @@ def parse_mcqs(text):
 
     rows = []
     qno = None
-    qtext_lines = []
+    qtext = ""
     opts = {}
     answer = None
-    in_options = False
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Option lines
-        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
-        if m_opt:
-            opts[m_opt.group(1).lower()] = m_opt.group(2)
-            in_options = True
-            continue
-
-        # Answer line like 3.B
-        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        # Answer line like 4.D
+        m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
         if m_ans:
-            answer = m_ans.group(1).upper()
-            in_options = False
-            continue
-
-        # New question line: only if previous question has options and answer
-        m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q and opts and answer:
-            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-            rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])
-            # Start new question
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
+            answer = m_ans.group(2).upper()
+            # Save the question
+            if qno and opts:
+                rows.append([
+                    qno,
+                    qtext.strip(),
+                    opts.get('a',''),
+                    opts.get('b',''),
+                    opts.get('c',''),
+                    opts.get('d',''),
+                    answer
+                ])
+            # Reset
+            qno = None
+            qtext = ""
             opts = {}
             answer = None
-            in_options = False
             continue
 
-        # First question or continuation
-        if qno is None:
-            m_q_start = re.match(r'^(\d+)\.(.*)', line)
-            if m_q_start:
-                qno = m_q_start.group(1)
-                qtext_lines = [m_q_start.group(2).strip()]
+        # Multi-line options: A) Option text
+        m_opt = re.findall(r'([a-dA-D])\)\s*([^a-dA-D]*)', line)
+        if m_opt:
+            for o, t in m_opt:
+                opts[o.lower()] = t.strip()
             continue
-        elif not in_options:
-            qtext_lines.append(line)
 
-    # Add last question
-    if qno and opts and answer:
-        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-        rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])
+        # Inline options: a) ... b) ... c) ... d) ...
+        m_inline_opts = re.findall(r'([a-dA-D])\)\s*([^a-dA-D]*)', line)
+        if m_inline_opts and not line.startswith(tuple(str(i) for i in range(1,1000))):
+            for o, t in m_inline_opts:
+                opts[o.lower()] = t.strip()
+
+        # New question line
+        m_q = re.match(r'^(\d+)\.(.*)', line)
+        if m_q:
+            qno = m_q.group(1)
+            rest = m_q.group(2).strip()
+            # If options are inline
+            if any(rest.lower().find(c + ')') != -1 for c in ['a','b','c','d']):
+                # Extract options
+                opt_parts = re.split(r'([a-dA-D]\))', rest)
+                qtext_parts = []
+                current_opt = None
+                for part in opt_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    if re.match(r'^[a-dA-D]\)$', part):
+                        current_opt = part[0].lower()
+                        opts[current_opt] = ""
+                    else:
+                        if current_opt:
+                            opts[current_opt] += part.strip()
+                        else:
+                            qtext_parts.append(part.strip())
+                qtext = " ".join(qtext_parts)
+            else:
+                qtext = rest
+            continue
+
+        # Continuation of question text
+        if qno:
+            qtext += " " + line
 
     return rows
 
