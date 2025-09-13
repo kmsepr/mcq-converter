@@ -64,15 +64,15 @@ def index():
     """
 
 def parse_mcqs(text):
-    """Parse MCQs from text into rows (supports multi-line questions)."""
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    """Parse multi-line MCQs with options and correct answer."""
+    text = text.replace('\r\n', '\n').replace('\r','\n')
     lines = text.split('\n')
-    rows = []
 
-    qno = ""
+    rows = []
+    qno = None
     qtext_lines = []
     opts = {}
-    answer = ""
+    answer = None
 
     for line in lines:
         line = line.strip()
@@ -83,10 +83,9 @@ def parse_mcqs(text):
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q:
             if qno and opts and answer:
-                question_full = ' '.join(qtext_lines).strip()
                 rows.append([
                     qno,
-                    question_full,
+                    ' '.join(qtext_lines).strip(),
                     opts.get('a',''),
                     opts.get('b',''),
                     opts.get('c',''),
@@ -96,7 +95,7 @@ def parse_mcqs(text):
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             opts = {}
-            answer = ""
+            answer = None
             continue
 
         # Match options a-d
@@ -105,22 +104,21 @@ def parse_mcqs(text):
             opts[m_opt.group(1).lower()] = m_opt.group(2)
             continue
 
-        # Match answer
-        m_ans = re.search(r'([A-Da-d])$', line)
-        if m_ans and not re.match(r'^[a-dA-D]\)', line):
+        # Match answer like "1.C"
+        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        if m_ans:
             answer = m_ans.group(1)
             continue
 
-        # Append extra lines to question
-        if not re.match(r'^[a-dA-D]\)', line):
+        # Extra question lines
+        if qno:
             qtext_lines.append(line)
 
     # Add last question
     if qno and opts and answer:
-        question_full = ' '.join(qtext_lines).strip()
         rows.append([
             qno,
-            question_full,
+            ' '.join(qtext_lines).strip(),
             opts.get('a',''),
             opts.get('b',''),
             opts.get('c',''),
