@@ -88,11 +88,12 @@ def index():
     """
 
 def parse_mcqs(text):
-    """Parse MCQs into rows for Excel."""
+    """Parse MCQs into rows for Excel (handles multi-line questions)."""
     lines = text.splitlines()
     rows = []
+
     qno = ""
-    qtext = ""
+    qtext_lines = []
     opts = {}
     answer = ""
 
@@ -106,11 +107,11 @@ def parse_mcqs(text):
         if m_q:
             # Save previous question
             if qno and opts and answer:
-                question_full = f"{qtext.strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                rows.append([1, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
+                question_full = f"{' '.join(qtext_lines).strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([qno, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
             # Start new question
             qno = m_q.group(1)
-            qtext = m_q.group(2)
+            qtext_lines = [m_q.group(2).strip()]
             opts = {}
             answer = ""
             continue
@@ -123,17 +124,18 @@ def parse_mcqs(text):
 
         # Match answer (e.g., 1.C or Answer: C)
         m_ans = re.search(r'([A-Da-d])$', line)
-        if m_ans:
+        if m_ans and not line.lower().startswith(('a)', 'b)', 'c)', 'd)')):
             answer = m_ans.group(1)
             continue
 
-        # Append line to question text if not matched
-        qtext += " " + line
+        # Append line to question text
+        if not re.match(r'^[a-dA-D]\)', line):
+            qtext_lines.append(line)
 
     # Add last question
     if qno and opts and answer:
-        question_full = f"{qtext.strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-        rows.append([1, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
+        question_full = f"{' '.join(qtext_lines).strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+        rows.append([qno, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
 
     return rows
 
