@@ -13,37 +13,21 @@ def index():
     <head>
         <title>MCQ Converter</title>
         <style>
-            body {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                font-family: Arial, sans-serif;
-                background: linear-gradient(135deg, #4facfe, #00f2fe);
-                margin: 0;
-            }
-            .container {
-                text-align: center;
-                background: white;
-                padding: 50px;
-                border-radius: 20px;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-                width: 700px;
-                max-width: 95%;
-            }
+            body { display: flex; justify-content: center; align-items: center;
+                   height: 100vh; font-family: Arial, sans-serif;
+                   background: linear-gradient(135deg, #4facfe, #00f2fe); margin: 0; }
+            .container { text-align: center; background: white; padding: 50px;
+                         border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+                         width: 700px; max-width: 95%; }
             h1 { font-size: 42px; margin-bottom: 20px; color: #222; }
             p { font-size: 18px; color: #555; margin-bottom: 20px; }
-            textarea {
-                width: 100%; height: 200px; padding: 15px; font-size: 16px;
-                border-radius: 10px; border: 1px solid #ccc; resize: vertical;
-                margin-bottom: 20px;
-            }
+            textarea { width: 100%; height: 200px; padding: 15px; font-size: 16px;
+                       border-radius: 10px; border: 1px solid #ccc; resize: vertical;
+                       margin-bottom: 20px; }
             input[type=file] { margin: 15px 0; font-size: 16px; }
-            input[type=submit] {
-                margin-top: 20px; background: #007bff; color: white;
-                border: none; padding: 15px 30px; font-size: 18px;
-                border-radius: 10px; cursor: pointer; transition: 0.3s;
-            }
+            input[type=submit] { margin-top: 20px; background: #007bff; color: white;
+                                 border: none; padding: 15px 30px; font-size: 18px;
+                                 border-radius: 10px; cursor: pointer; transition: 0.3s; }
             input[type=submit]:hover { background: #0056b3; }
         </style>
     </head>
@@ -64,7 +48,7 @@ def index():
     """
 
 def parse_mcqs(text):
-    """Parse multi-line MCQs with options and correct answer."""
+    """Parse MCQs with nested numbered statements inside the question."""
     text = text.replace('\r\n', '\n').replace('\r','\n')
     lines = text.split('\n')
 
@@ -73,15 +57,31 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
+    in_options = False  # Flag to know when options started
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Match question number
+        # Match options a-d
+        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).lower()] = m_opt.group(2)
+            in_options = True
+            continue
+
+        # Match answer like "1.C"
+        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        if m_ans:
+            answer = m_ans.group(1)
+            in_options = False
+            continue
+
+        # Match new question: number + dot at start, but only if not inside options
         m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q:
+        if m_q and not in_options:
+            # Save previous question
             if qno and opts and answer:
                 rows.append([
                     qno,
@@ -96,22 +96,11 @@ def parse_mcqs(text):
             qtext_lines = [m_q.group(2).strip()]
             opts = {}
             answer = None
+            in_options = False
             continue
 
-        # Match options a-d
-        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
-        if m_opt:
-            opts[m_opt.group(1).lower()] = m_opt.group(2)
-            continue
-
-        # Match answer like "1.C"
-        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
-        if m_ans:
-            answer = m_ans.group(1)
-            continue
-
-        # Extra question lines
-        if qno:
+        # Add to question text
+        if qno and not in_options:
             qtext_lines.append(line)
 
     # Add last question
