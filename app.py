@@ -48,7 +48,6 @@ def index():
     """
 
 def parse_mcqs(text):
-    """Parse MCQs with nested numbered statements inside the question."""
     text = text.replace('\r\n', '\n').replace('\r','\n')
     lines = text.split('\n')
 
@@ -57,40 +56,39 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
-    in_options = False  # Flag to know when options started
+    in_options = False
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Match options a-d
+        # Option line
         m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
         if m_opt:
             opts[m_opt.group(1).lower()] = m_opt.group(2)
             in_options = True
             continue
 
-        # Match answer like "1.C"
+        # Answer line like "1.C"
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
-            answer = m_ans.group(1)
+            answer = m_ans.group(1).upper()
             in_options = False
             continue
 
-        # Match new question: number + dot at start, but only if not inside options
+        # New question
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q and not in_options:
-            # Save previous question
             if qno and opts and answer:
+                # Build question text with options
+                question_full = ' '.join(qtext_lines).strip() + '\n' + \
+                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
                 rows.append([
-                    qno,
-                    ' '.join(qtext_lines).strip(),
-                    opts.get('a',''),
-                    opts.get('b',''),
-                    opts.get('c',''),
-                    opts.get('d',''),
-                    {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")
+                    1,
+                    question_full,
+                    'A', 'B', 'C', 'D',
+                    {"A":1,"B":2,"C":3,"D":4}[answer]
                 ])
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
@@ -99,30 +97,29 @@ def parse_mcqs(text):
             in_options = False
             continue
 
-        # Add to question text
+        # Continuation of question text
         if qno and not in_options:
             qtext_lines.append(line)
 
     # Add last question
     if qno and opts and answer:
+        question_full = ' '.join(qtext_lines).strip() + '\n' + \
+            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
         rows.append([
-            qno,
-            ' '.join(qtext_lines).strip(),
-            opts.get('a',''),
-            opts.get('b',''),
-            opts.get('c',''),
-            opts.get('d',''),
-            {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")
+            1,
+            question_full,
+            'A', 'B', 'C', 'D',
+            {"A":1,"B":2,"C":3,"D":4}[answer]
         ])
 
     return rows
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    # Use pasted text first
+    # Check paste first
     text = request.form.get("mcq_text", "").strip()
 
-    # If no paste, use uploaded file
+    # Else use file
     if not text and 'file' in request.files:
         file = request.files['file']
         if file and file.filename != '':
@@ -138,7 +135,7 @@ def convert():
     if not rows:
         return "No valid MCQs found.", 400
 
-    df = pd.DataFrame(rows, columns=["Q.No","Question","A","B","C","D","Correct Answer"])
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
