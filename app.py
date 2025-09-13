@@ -142,22 +142,24 @@ def convert():
     # Check pasted text first
     text = request.form.get("mcq_text", "").strip()
 
-    # If no text, check uploaded file
+    # If no pasted text, check uploaded file
     if not text and 'file' in request.files:
         file = request.files['file']
-        if file.filename != '':
-            text = file.read().decode('utf-8')
+        if file and file.filename != '':
+            try:
+                text = file.read().decode('utf-8')
+            except UnicodeDecodeError:
+                return "Failed to read the uploaded file. Ensure it is a UTF-8 encoded .txt file.", 400
 
     if not text:
         return "No text or file provided!", 400
 
     # Parse MCQs
     rows = parse_mcqs(text)
-
     if not rows:
         return "No valid MCQs found in the input.", 400
 
-    # Create Excel
+    # Generate Excel
     df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
     df.to_excel(output, index=False)
