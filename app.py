@@ -29,33 +29,15 @@ def index():
                 width: 700px;
                 max-width: 95%;
             }
-            h1 {
-                font-size: 40px;
-                margin-bottom: 15px;
-                color: #222;
-            }
-            p {
-                font-size: 20px;
-                color: #444;
-                margin-bottom: 40px;
-            }
-            input[type=file] {
-                margin: 25px 0;
-                font-size: 18px;
-            }
+            h1 { font-size: 40px; margin-bottom: 15px; color: #222; }
+            p { font-size: 20px; color: #444; margin-bottom: 40px; }
+            input[type=file] { margin: 25px 0; font-size: 18px; }
             input[type=submit] {
-                background: #007bff;
-                color: white;
-                border: none;
-                padding: 18px 36px;
-                font-size: 20px;
-                border-radius: 10px;
-                cursor: pointer;
-                transition: 0.3s;
+                background: #007bff; color: white; border: none;
+                padding: 18px 36px; font-size: 20px;
+                border-radius: 10px; cursor: pointer; transition: 0.3s;
             }
-            input[type=submit]:hover {
-                background: #0056b3;
-            }
+            input[type=submit]:hover { background: #0056b3; }
         </style>
     </head>
     <body>
@@ -99,7 +81,7 @@ def convert():
             continue
         qnum, rest = match_q.groups()
 
-        # Extract options a–d
+        # Extract options
         options = re.findall(r'([a-d])\)(.*?)(?=\n[a-d]\)|$)', rest, re.DOTALL | re.IGNORECASE)
         opts = {k.lower(): v.strip() for k, v in options}
 
@@ -107,21 +89,22 @@ def convert():
         ans_match = re.search(rf'{qnum}\.([A-D])', block)
         ans = ans_match.group(1) if ans_match else ""
 
-        # Build question + options text
+        # Build ONE single string (question + options)
         qtext_only = re.split(r'\na\)', rest, 1)[0].strip()
         question_full = qtext_only
         for letter in ['a', 'b', 'c', 'd']:
             if letter in opts:
                 question_full += f"\n{letter.upper()}) {opts[letter]}"
 
-        rows.append([1, question_full, "A", "B", "C", "D", ans_to_num(ans)])
+        # Add row: all content stays in Column 2
+        rows.append([1, question_full.strip(), "A", "B", "C", "D", ans_to_num(ans)])
 
-    # Create DataFrame
+    # DataFrame
     df = pd.DataFrame(rows, columns=["1", "Question", "A", "B", "C", "D", "Correct Answer"])
 
     print(f"✅ Parsed {len(rows)} questions")
 
-    # Return Excel file
+    # Return Excel
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
