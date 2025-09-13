@@ -23,7 +23,7 @@ def index():
             .container {
                 text-align: center;
                 background: white;
-                padding: 70px;
+                padding: 50px;
                 border-radius: 20px;
                 box-shadow: 0 10px 25px rgba(0,0,0,0.25);
                 width: 700px;
@@ -35,20 +35,31 @@ def index():
                 color: #222;
             }
             p {
-                font-size: 20px;
+                font-size: 18px;
                 color: #555;
-                margin-bottom: 40px;
+                margin-bottom: 20px;
+            }
+            textarea {
+                width: 100%;
+                height: 200px;
+                padding: 15px;
+                font-size: 16px;
+                border-radius: 10px;
+                border: 1px solid #ccc;
+                resize: vertical;
+                margin-bottom: 20px;
             }
             input[type=file] {
-                margin: 25px 0;
-                font-size: 18px;
+                margin: 15px 0;
+                font-size: 16px;
             }
             input[type=submit] {
+                margin-top: 20px;
                 background: #007bff;
                 color: white;
                 border: none;
-                padding: 18px 36px;
-                font-size: 20px;
+                padding: 15px 30px;
+                font-size: 18px;
                 border-radius: 10px;
                 cursor: pointer;
                 transition: 0.3s;
@@ -61,11 +72,13 @@ def index():
     <body>
         <div class="container">
             <h1>📘 MCQ to Excel Converter</h1>
-            <p>Upload your .txt file and download a clean Excel file with questions & answers.</p>
+            <p>Paste your MCQs below or upload a .txt file.</p>
             <form method="post" action="/convert" enctype="multipart/form-data">
+                <textarea name="mcq_text" placeholder="Paste your questions here..."></textarea>
+                <br>
                 <input type="file" name="file" accept=".txt">
-                <br><br>
-                <input type="submit" value="Upload & Convert">
+                <br>
+                <input type="submit" value="Convert to Excel">
             </form>
         </div>
     </body>
@@ -74,8 +87,17 @@ def index():
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    file = request.files['file']
-    text = file.read().decode('utf-8')
+    # First try pasted text
+    text = request.form.get("mcq_text", "").strip()
+
+    # If no text was pasted, try file upload
+    if not text and 'file' in request.files:
+        file = request.files['file']
+        if file.filename != '':
+            text = file.read().decode('utf-8')
+
+    if not text:
+        return "No text or file provided!", 400
 
     # Pattern to capture: Qn, options a-d, and answer like "1.C"
     pattern = re.compile(
@@ -90,9 +112,11 @@ def convert():
 
     rows = []
     for qno, qtext, opt_a, opt_b, opt_c, opt_d, ans_letter in matches:
-        # Build question string including options
         question_full = f"{qtext.strip()}\nA) {opt_a.strip()}\nB) {opt_b.strip()}\nC) {opt_c.strip()}\nD) {opt_d.strip()}"
         rows.append([1, question_full, "A", "B", "C", "D", ans_to_num(ans_letter)])
+
+    if not rows:
+        return "No valid MCQs found in the input.", 400
 
     df = pd.DataFrame(rows, columns=["1", "Question", "A", "B", "C", "D", "Correct Answer"])
 
