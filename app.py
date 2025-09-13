@@ -1,5 +1,7 @@
 from flask import Flask, request, send_file
-import pandas as pd, re, io
+import pandas as pd
+import re
+import io
 
 app = Flask(__name__)
 
@@ -85,12 +87,62 @@ def index():
     </html>
     """
 
+def parse_mcqs(text):
+    """Parse MCQs into rows for Excel."""
+    lines = text.splitlines()
+    rows = []
+    qno = ""
+    qtext = ""
+    opts = {}
+    answer = ""
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Match question number
+        m_q = re.match(r'^(\d+)\.(.*)', line)
+        if m_q:
+            # Save previous question
+            if qno and opts and answer:
+                question_full = f"{qtext.strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([1, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
+            # Start new question
+            qno = m_q.group(1)
+            qtext = m_q.group(2)
+            opts = {}
+            answer = ""
+            continue
+
+        # Match options a-d
+        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).lower()] = m_opt.group(2)
+            continue
+
+        # Match answer (e.g., 1.C or Answer: C)
+        m_ans = re.search(r'([A-Da-d])$', line)
+        if m_ans:
+            answer = m_ans.group(1)
+            continue
+
+        # Append line to question text if not matched
+        qtext += " " + line
+
+    # Add last question
+    if qno and opts and answer:
+        question_full = f"{qtext.strip()}\nA) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+        rows.append([1, question_full, "A", "B", "C", "D", {"A":1,"B":2,"C":3,"D":4}.get(answer.upper(),"")])
+
+    return rows
+
 @app.route('/convert', methods=['POST'])
 def convert():
-    # First try pasted text
+    # Check pasted text first
     text = request.form.get("mcq_text", "").strip()
 
-    # If no text was pasted, try file upload
+    # If no text, check uploaded file
     if not text and 'file' in request.files:
         file = request.files['file']
         if file.filename != '':
@@ -99,30 +151,18 @@ def convert():
     if not text:
         return "No text or file provided!", 400
 
-    # Pattern to capture: Qn, options a-d, and answer like "1.C"
-    pattern = re.compile(
-        r'(\d+)\.(.*?)\n\s*a\)(.*?)\n\s*b\)(.*?)\n\s*c\)(.*?)\n\s*d\)(.*?)\n\s*\d+\.\s*([A-D])',
-        re.DOTALL | re.IGNORECASE
-    )
-
-    matches = pattern.findall(text)
-
-    def ans_to_num(ans):
-        return {"A": 1, "B": 2, "C": 3, "D": 4}.get(ans.upper(), "")
-
-    rows = []
-    for qno, qtext, opt_a, opt_b, opt_c, opt_d, ans_letter in matches:
-        question_full = f"{qtext.strip()}\nA) {opt_a.strip()}\nB) {opt_b.strip()}\nC) {opt_c.strip()}\nD) {opt_d.strip()}"
-        rows.append([1, question_full, "A", "B", "C", "D", ans_to_num(ans_letter)])
+    # Parse MCQs
+    rows = parse_mcqs(text)
 
     if not rows:
         return "No valid MCQs found in the input.", 400
 
-    df = pd.DataFrame(rows, columns=["1", "Question", "A", "B", "C", "D", "Correct Answer"])
-
+    # Create Excel
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
+
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
 if __name__ == '__main__':
