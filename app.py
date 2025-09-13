@@ -63,33 +63,27 @@ def parse_mcqs(text):
         if not line:
             continue
 
-        # Option line
+        # Option lines
         m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)
         if m_opt:
             opts[m_opt.group(1).lower()] = m_opt.group(2)
             in_options = True
             continue
 
-        # Answer line like "1.C"
+        # Answer line like 3.B
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
             in_options = False
             continue
 
-        # New question
+        # New question line: only if previous question has options and answer
         m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q and not in_options:
-            if qno and opts and answer:
-                # Build question text with options
-                question_full = ' '.join(qtext_lines).strip() + '\n' + \
-                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                rows.append([
-                    1,
-                    question_full,
-                    'A', 'B', 'C', 'D',
-                    {"A":1,"B":2,"C":3,"D":4}[answer]
-                ])
+        if m_q and opts and answer:
+            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+            rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])
+            # Start new question
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             opts = {}
@@ -97,29 +91,27 @@ def parse_mcqs(text):
             in_options = False
             continue
 
-        # Continuation of question text
-        if qno and not in_options:
+        # First question or continuation
+        if qno is None:
+            m_q_start = re.match(r'^(\d+)\.(.*)', line)
+            if m_q_start:
+                qno = m_q_start.group(1)
+                qtext_lines = [m_q_start.group(2).strip()]
+            continue
+        elif not in_options:
             qtext_lines.append(line)
 
     # Add last question
     if qno and opts and answer:
-        question_full = ' '.join(qtext_lines).strip() + '\n' + \
+        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
             f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-        rows.append([
-            1,
-            question_full,
-            'A', 'B', 'C', 'D',
-            {"A":1,"B":2,"C":3,"D":4}[answer]
-        ])
+        rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])
 
     return rows
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    # Check paste first
     text = request.form.get("mcq_text", "").strip()
-
-    # Else use file
     if not text and 'file' in request.files:
         file = request.files['file']
         if file and file.filename != '':
