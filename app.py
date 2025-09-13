@@ -3,6 +3,17 @@ import pandas as pd, re, io
 
 app = Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def index():
+    return """
+    <h2>MCQ Converter</h2>
+    <form method="post" action="/convert" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".txt">
+        <br><br>
+        <input type="submit" value="Upload & Convert">
+    </form>
+    """
+
 @app.route('/convert', methods=['POST'])
 def convert():
     file = request.files['file']
@@ -29,4 +40,4 @@ def convert():
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=3000)
