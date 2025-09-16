@@ -1,69 +1,122 @@
-from flask import Flask, request, send_file, render_template_string
+from flask import Flask, request, send_file
 import pandas as pd
+import re
 import io
 
 app = Flask(__name__)
 
-HTML_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>MCQ Converter</title>
-<style>
-body { font-family: Arial; display:flex; justify-content:center; align-items:center; height:100vh; background:#f0f0f0; }
-.container { background:white; padding:30px; border-radius:15px; box-shadow:0 10px 20px rgba(0,0,0,0.2); width:90%; max-width:800px; }
-textarea { width:100%; height:200px; margin-bottom:15px; padding:10px; font-size:14px; }
-input[type=file], input[type=submit] { margin:5px 0; padding:10px; font-size:16px; }
-</style>
-</head>
-<body>
-<div class="container">
-<h2>📘 MCQ Converter</h2>
-
-<h3>Paste MCQs as Text</h3>
-<form method="post" action="/convert_text">
-<textarea name="mcq_text" placeholder="Paste MCQs here..."></textarea><br>
-<input type="submit" value="Convert to Excel">
-</form>
-
-<hr>
-
-<h3>Upload MCQs CSV/Excel</h3>
-<form method="post" action="/convert_file" enctype="multipart/form-data">
-<input type="file" name="mcq_file" accept=".csv, .xlsx, .xls"><br>
-<input type="submit" value="Convert File">
-</form>
-</div>
-</body>
-</html>
-"""
-
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
-    return HTML_PAGE
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>MCQ Converter</title>
+    <style>
+    body {
+        display: flex; justify-content: center; align-items: center;
+        height: 100vh; font-family: Arial, sans-serif;
+        background: linear-gradient(135deg, #4facfe, #00f2fe); margin: 0;
+    }
+    .container {
+        text-align: center; background: white; padding: 40px;
+        border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+        width: 80%; max-width: 900px;
+    }
+    h1 { font-size: 36px; margin-bottom: 20px; color: #222; }
+    textarea {
+        width: 100%; height: 400px; padding: 15px; font-size: 16px;
+        border-radius: 10px; border: 1px solid #ccc; resize: vertical;
+        margin-bottom: 20px;
+    }
+    input[type=submit] {
+        margin-top: 20px; background: #007bff; color: white;
+        border: none; padding: 15px 30px; font-size: 18px;
+        border-radius: 10px; cursor: pointer; transition: 0.3s;
+    }
+    input[type=submit]:hover { background: #0056b3; }
+    </style>
+    </head>
+    <body>
+    <div class="container">
+        <h1>📘 MCQ to Excel Converter</h1>
+        <form method="post" action="/convert">
+            <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea>
+            <br>
+            <input type="submit" value="Convert to Excel">
+        </form>
+    </div>
+    </body>
+    </html>
+    """
 
-@app.route("/convert_file", methods=["POST"])
-def convert_file():
-    f = request.files.get("mcq_file")
-    if not f:
-        return "No file selected!", 400
+def parse_mcqs(text):
+    text = text.replace('\r\n', '\n').replace('\r','\n')
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
 
-    # Read file
-    if f.filename.endswith(".csv"):
-        df = pd.read_csv(f)
-    else:
-        df = pd.read_excel(f)
+    rows = []
+    qno = None
+    qtext_lines = []
+    opts = {}
+    answer = None
 
-    # Export as Excel
+    for line in lines:
+        # Match option lines (A-D or a-d in () or .)
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
+            continue
+
+        # Match answer lines (e.g., 12.C or 12.c)
+        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        if m_ans:
+            answer = m_ans.group(1).upper()
+            # Save question
+            if qno and opts and answer:
+                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([
+                    1,
+                    question_full,
+                    'A','B','C','D',
+                    {"A":1,"B":2,"C":3,"D":4}[answer]
+                ])
+            # Reset
+            qno = None
+            qtext_lines = []
+            opts = {}
+            answer = None
+            continue
+
+        # Match question start (e.g., 11. or 12.)
+        m_q = re.match(r'^(\d+)\.(.*)', line)
+        if m_q:
+            qno = m_q.group(1)
+            qtext_lines = [m_q.group(2).strip()]
+            continue
+
+        # Continuation of question text
+        if qno:
+            qtext_lines.append(line)
+
+    return rows
+
+@app.route('/convert', methods=['POST'])
+def convert():
+    text = request.form.get("mcq_text", "").strip()
+    if not text:
+        return "No text provided!", 400
+
+    rows = parse_mcqs(text)
+
+    if not rows:
+        return "Could not parse any MCQs. Please check format.", 400
+
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
-@app.route("/convert_text", methods=["POST"])
-def convert_text():
-    # Your text parser here
-    return "Text conversion not implemented yet."
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=3000)
