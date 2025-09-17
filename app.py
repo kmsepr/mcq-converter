@@ -59,47 +59,49 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
-    explanation = ""
+    explanation_lines = []
+    collecting_expl = False
 
     for line in lines:
-        # Match option lines
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
-        if m_opt:
+        # Match option lines (A,B,C,D)
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.\s]+\s*(.*)', line)
+        if m_opt and not collecting_expl:
             opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines (e.g., 12.B)
+        # Match answer lines (e.g., 1.C)
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
-            if qno and opts and answer:
-                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                rows.append([
-                    1,
-                    question_full,
-                    'A','B','C','D',
-                    {"A":1,"B":2,"C":3,"D":4}[answer],
-                    explanation.strip()
-                ])
-            qno, qtext_lines, opts, answer, explanation = None, [], {}, None, ""
+            collecting_expl = True  # Everything after this is explanation
             continue
 
-        # Match question start
+        # Match question start (e.g., "1. Question text")
         m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q:
+        if m_q and not collecting_expl:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             continue
 
-        # Explanation marker (optional: starts with "Exp:" or "Explanation:")
-        if line.lower().startswith("exp") or line.lower().startswith("explanation"):
-            explanation = line.split(":",1)[-1] if ":" in line else line
-            continue
-
-        # Continuation of question text
-        if qno:
+        # Collect explanation lines
+        if collecting_expl:
+            explanation_lines.append(line)
+        elif qno:
             qtext_lines.append(line)
+
+        # If we already have question + options + answer + explanation
+        if collecting_expl and (line == lines[-1] or re.match(r'^\d+\.', line)):
+            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+            rows.append([
+                1,
+                question_full,
+                'A','B','C','D',
+                {"A":1,"B":2,"C":3,"D":4}[answer],
+                "\n".join(explanation_lines).strip()
+            ])
+            # Reset for next question
+            qno, qtext_lines, opts, answer, explanation_lines, collecting_expl = None, [], {}, None, [], False
 
     return rows
 
