@@ -59,19 +59,19 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
+    explanation = ""
 
     for line in lines:
-        # Match option lines (A-D or a-d in () or .)
+        # Match option lines
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
         if m_opt:
             opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines (e.g., 12.C or 12.c)
+        # Match answer lines (e.g., 12.B)
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
-            # Save question
             if qno and opts and answer:
                 question_full = '\n'.join(qtext_lines).strip() + '\n' + \
                     f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
@@ -79,20 +79,22 @@ def parse_mcqs(text):
                     1,
                     question_full,
                     'A','B','C','D',
-                    {"A":1,"B":2,"C":3,"D":4}[answer]
+                    {"A":1,"B":2,"C":3,"D":4}[answer],
+                    explanation.strip()
                 ])
-            # Reset
-            qno = None
-            qtext_lines = []
-            opts = {}
-            answer = None
+            qno, qtext_lines, opts, answer, explanation = None, [], {}, None, ""
             continue
 
-        # Match question start (e.g., 11. or 12.)
+        # Match question start
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
+            continue
+
+        # Explanation marker (optional: starts with "Exp:" or "Explanation:")
+        if line.lower().startswith("exp") or line.lower().startswith("explanation"):
+            explanation = line.split(":",1)[-1] if ":" in line else line
             continue
 
         # Continuation of question text
@@ -108,11 +110,10 @@ def convert():
         return "No text provided!", 400
 
     rows = parse_mcqs(text)
-
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer","Explanation"])
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
