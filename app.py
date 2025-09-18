@@ -55,7 +55,6 @@ def parse_mcqs(text):
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
     rows = []
-    qno = None
     qtext_lines = []
     opts = {}
     answer = None
@@ -73,37 +72,36 @@ def parse_mcqs(text):
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
-            collecting_expl = True  # everything after this is explanation
+            collecting_expl = True
             continue
 
-        # Match question start (e.g., "1. Question text")
-        m_q = re.match(r'^(\d+)\.(.*)', line)
+        # Match question start (strip leading number like "1.")
+        m_q = re.match(r'^\d+\.(.*)', line)
         if m_q and not collecting_expl and not opts:
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
+            qtext_lines = [m_q.group(1).strip()]
             continue
 
         # Collect explanation lines
         if collecting_expl:
             explanation_lines.append(line)
-        elif qno:
+        else:
             qtext_lines.append(line)
 
         # Finalize when we hit a new question or end of input
         if collecting_expl and (i == len(lines)-1 or re.match(r'^\d+\.', lines[i+1])):
+            # Build question with options inside
+            question_full = "\n".join(qtext_lines).strip()
+            question_full += "\n" + \
+                f"A) {opts.get('A','')}\nB) {opts.get('B','')}\nC) {opts.get('C','')}\nD) {opts.get('D','')}"
+
             rows.append([
-                len(rows)+1,                          # Sr. No.
-                "\n".join(qtext_lines).strip(),       # Question (includes i), ii), iii) lines)
-                opts.get('A', ''),
-                opts.get('B', ''),
-                opts.get('C', ''),
-                opts.get('D', ''),
-                {"A":1,"B":2,"C":3,"D":4}[answer],   # Correct option number
-                "\n".join(explanation_lines).strip(), # Explanation
-                ""                                    # Image URL placeholder
+                question_full,                        # Question with options inside
+                "A","B","C","D",                      # Fixed option labels
+                {"A":1,"B":2,"C":3,"D":4}[answer],    # Correct option number
+                "\n".join(explanation_lines).strip()  # Explanation
             ])
             # Reset for next question
-            qno, qtext_lines, opts, answer, explanation_lines, collecting_expl = None, [], {}, None, [], False
+            qtext_lines, opts, answer, explanation_lines, collecting_expl = [], {}, None, [], False
 
     return rows
 
