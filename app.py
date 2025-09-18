@@ -95,10 +95,12 @@ def parse_mcqs(text):
                 f"A) {opts.get('A','')}\nB) {opts.get('B','')}\nC) {opts.get('C','')}\nD) {opts.get('D','')}"
 
             rows.append([
-                question_full,                        # Question with options inside
-                "A","B","C","D",                      # Fixed option labels
-                {"A":1,"B":2,"C":3,"D":4}[answer],    # Correct option number
-                "\n".join(explanation_lines).strip()  # Explanation
+                1,                                      # Column A (always 1)
+                question_full,                          # Column B (question + options)
+                "A", "B", "C", "D",                     # Columns C–F
+                {"A":1,"B":2,"C":3,"D":4}[answer],      # Column G (correct option index)
+                "\n".join(explanation_lines).strip(),   # Column H (explanation)
+                ""                                      # Column I (image URL, blank)
             ])
             # Reset for next question
             qtext_lines, opts, answer, explanation_lines, collecting_expl = [], {}, None, [], False
@@ -115,13 +117,10 @@ def convert():
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=[
-        "Question", "Option 1", "Option 2",
-        "Option 3", "Option 4", "Correct Option Number",
-        "Explanation"
-    ])
+    df = pd.DataFrame(rows)
     output = io.BytesIO()
-    df.to_excel(output, index=False, engine="openpyxl")
+    # Write WITHOUT headers
+    df.to_excel(output, index=False, header=False, engine="openpyxl")
     output.seek(0)
     return send_file(
         output,
