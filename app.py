@@ -116,9 +116,9 @@ def convert():
         return "Could not parse any MCQs. Please check format.", 400
 
     df = pd.DataFrame(rows, columns=[
-        "Sr. No.", "Question", "Option 1", "Option 2",
+        "Question", "Option 1", "Option 2",
         "Option 3", "Option 4", "Correct Option Number",
-        "Explanation", "Image URL"
+        "Explanation"
     ])
     output = io.StringIO()
     df.to_csv(output, index=False, encoding="utf-8")
