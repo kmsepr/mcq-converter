@@ -39,11 +39,11 @@ def index():
     </head>
     <body>
     <div class="container">
-        <h1>📘 MCQ to CSV Converter</h1>
+        <h1>📘 MCQ to Excel Converter</h1>
         <form method="post" action="/convert">
             <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea>
             <br>
-            <input type="submit" value="Convert to CSV">
+            <input type="submit" value="Convert to Excel">
         </form>
     </div>
     </body>
@@ -120,14 +120,14 @@ def convert():
         "Option 3", "Option 4", "Correct Option Number",
         "Explanation"
     ])
-    output = io.StringIO()
-    df.to_csv(output, index=False, encoding="utf-8")
+    output = io.BytesIO()
+    df.to_excel(output, index=False, engine="openpyxl")
     output.seek(0)
     return send_file(
-        io.BytesIO(output.getvalue().encode("utf-8")),
+        output,
         as_attachment=True,
-        download_name="mcqs.csv",
-        mimetype="text/csv"
+        download_name="mcqs.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 if __name__ == '__main__':
