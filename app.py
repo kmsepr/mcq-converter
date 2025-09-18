@@ -39,11 +39,11 @@ def index():
     </head>
     <body>
     <div class="container">
-        <h1>📘 MCQ to Excel Converter</h1>
+        <h1>📘 MCQ to CSV Converter</h1>
         <form method="post" action="/convert">
             <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea>
             <br>
-            <input type="submit" value="Convert to Excel">
+            <input type="submit" value="Convert to CSV">
         </form>
     </div>
     </body>
@@ -62,23 +62,23 @@ def parse_mcqs(text):
     explanation_lines = []
     collecting_expl = False
 
-    for line in lines:
+    for i, line in enumerate(lines):
         # Match option lines (A,B,C,D)
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.\s]+\s*(.*)', line)
         if m_opt and not collecting_expl:
-            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
+            opts[m_opt.group(1).upper()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines (e.g., 1.C)
+        # Match answer lines (e.g., 1.C or 1.D)
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
-            collecting_expl = True  # Everything after this is explanation
+            collecting_expl = True  # everything after this is explanation
             continue
 
         # Match question start (e.g., "1. Question text")
         m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q and not collecting_expl:
+        if m_q and not collecting_expl and not opts:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             continue
@@ -89,16 +89,18 @@ def parse_mcqs(text):
         elif qno:
             qtext_lines.append(line)
 
-        # If we already have question + options + answer + explanation
-        if collecting_expl and (line == lines[-1] or re.match(r'^\d+\.', line)):
-            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+        # Finalize when we hit a new question or end of input
+        if collecting_expl and (i == len(lines)-1 or re.match(r'^\d+\.', lines[i+1])):
             rows.append([
-                1,
-                question_full,
-                'A','B','C','D',
-                {"A":1,"B":2,"C":3,"D":4}[answer],
-                "\n".join(explanation_lines).strip()
+                len(rows)+1,                          # Sr. No.
+                "\n".join(qtext_lines).strip(),       # Question (includes i), ii), iii) lines)
+                opts.get('A', ''),
+                opts.get('B', ''),
+                opts.get('C', ''),
+                opts.get('D', ''),
+                {"A":1,"B":2,"C":3,"D":4}[answer],   # Correct option number
+                "\n".join(explanation_lines).strip(), # Explanation
+                ""                                    # Image URL placeholder
             ])
             # Reset for next question
             qno, qtext_lines, opts, answer, explanation_lines, collecting_expl = None, [], {}, None, [], False
@@ -115,11 +117,20 @@ def convert():
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer","Explanation"])
-    output = io.BytesIO()
-    df.to_excel(output, index=False)
+    df = pd.DataFrame(rows, columns=[
+        "Sr. No.", "Question", "Option 1", "Option 2",
+        "Option 3", "Option 4", "Correct Option Number",
+        "Explanation", "Image URL"
+    ])
+    output = io.StringIO()
+    df.to_csv(output, index=False, encoding="utf-8")
     output.seek(0)
-    return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
+    return send_file(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        as_attachment=True,
+        download_name="mcqs.csv",
+        mimetype="text/csv"
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
