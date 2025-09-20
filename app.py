@@ -18,7 +18,7 @@ def index():
         height: 100vh; font-family: Arial, sans-serif;
     }
     form { text-align: center; }
-    textarea { width: 600px; height: 300px; }
+    textarea { width: 600px; height: 400px; }
     </style>
     </head>
     <body>
@@ -35,27 +35,58 @@ def index():
 def convert():
     text = request.form["mcqs"]
 
-    # Pattern: Question, Options, Answer
-    pattern = r"(.*?)\nA\)(.*?)\nB\)(.*?)\nC\)(.*?)\nD\)(.*?)\nAnswer\s*:\s*([ABCD])"
-    matches = re.findall(pattern, text, re.DOTALL)
+    # --- Extract answers like 1.C, 2.A, 3.D ---
+    answer_pattern = r"(\d+)\.([A-Da-d])"
+    answers = dict((int(num), letter.upper()) for num, letter in re.findall(answer_pattern, text))
+
+    # --- Extract question blocks ---
+    # Capture text starting with "1." until next number
+    question_pattern = r"(\d+)\.(.*?)(?=\n\d+\.|$)"
+    question_blocks = re.findall(question_pattern, text, re.DOTALL)
 
     rows = []
-    for idx, (q, a, b, c, d, ans) in enumerate(matches, start=1):
-        question_full = f"{q.strip()}\nA){a.strip()}\nB){b.strip()}\nC){c.strip()}\nD){d.strip()}"
-        correct_num = {"A": 1, "B": 2, "C": 3, "D": 4}[ans]
+    for qnum, block in question_blocks:
+        qnum = int(qnum)
+        block = block.strip()
 
-        # Fill only Column B and G, leave rest blank
+        # Split question + options
+        # Look for lines starting with a/b/c/d
+        options = re.findall(r"[\na-d][\)\:\-\.]\s*(.*)", block, re.IGNORECASE)
+        question_text = re.split(r"\n\s*[a-d][\)\:\-]", block, 1, re.IGNORECASE)[0].strip()
+
+        if len(options) < 4:
+            # Skip if options not found properly
+            continue
+
+        # Rebuild full question with options
+        question_full = (
+            f"{question_text.strip()}\n"
+            f"a) {options[0].strip()}\n"
+            f"b) {options[1].strip()}\n"
+            f"c) {options[2].strip()}\n"
+            f"d) {options[3].strip()}"
+        )
+
+        # Find correct answer number
+        correct_letter = answers.get(qnum, "")
+        correct_num = {"A": 1, "B": 2, "C": 3, "D": 4}.get(correct_letter, "")
+
+        # Fill Excel row (B=question, G=correct)
         row = ["", question_full, "", "", "", "", correct_num, "", "", ""]
         rows.append(row)
 
-    # Create DataFrame with 10 columns (A–J)
+    # --- Create Excel ---
     df = pd.DataFrame(rows, columns=list("ABCDEFGHIJ"))
-
     output = io.BytesIO()
     df.to_excel(output, index=False, header=False)
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name="mcqs.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="mcqs.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 if __name__ == "__main__":
     app.run(debug=True, port=3000)
