@@ -68,7 +68,7 @@ def parse_mcqs(text):
             continue
 
         # Match answer lines (e.g., 12.C or 12.c)
-        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        m_ans = re.match(r'^\s*\d+\.\s*([A-Da-d])\s*$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
             # Save question
