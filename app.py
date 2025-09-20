@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import io
 
-app = Flask(__name__)
+app = Flask(__name__)  # use __name__ instead of name
 
 @app.route("/", methods=["GET"])
 def index():
@@ -13,80 +13,125 @@ def index():
     <head>
     <title>MCQ Converter</title>
     <style>
-    body {
-        display: flex; justify-content: center; align-items: center;
-        height: 100vh; font-family: Arial, sans-serif;
-    }
-    form { text-align: center; }
-    textarea { width: 600px; height: 400px; }
+    body { display: flex; justify-content: center; align-items: center;
+    height: 100vh; font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #4facfe, #00f2fe); margin: 0; }
+    .container { text-align: center; background: white; padding: 50px;
+    border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    width: 700px; max-width: 95%; }
+    h1 { font-size: 42px; margin-bottom: 20px; color: #222; }
+    p { font-size: 18px; color: #555; margin-bottom: 20px; }
+    textarea { width: 100%; height: 200px; padding: 15px; font-size: 16px;
+    border-radius: 10px; border: 1px solid #ccc; resize: vertical;
+    margin-bottom: 20px; }
+    input[type=file] { margin: 15px 0; font-size: 16px; }
+    input[type=submit] { margin-top: 20px; background: #007bff; color: white;
+    border: none; padding: 15px 30px; font-size: 18px;
+    border-radius: 10px; cursor: pointer; transition: 0.3s; }
+    input[type=submit]:hover { background: #0056b3; }
     </style>
     </head>
     <body>
-        <form action="/convert" method="post">
-            <h2>Paste your MCQs below:</h2>
-            <textarea name="mcqs"></textarea><br><br>
-            <button type="submit">Convert to Excel</button>
-        </form>
+    <div class="container">
+    <h1>📘 MCQ to Excel Converter</h1>
+    <p>Paste your MCQs or upload a .txt file.</p>
+    <form method="post" action="/convert" enctype="multipart/form-data">
+    <textarea name="mcq_text" placeholder="Paste your questions here..."></textarea>
+    <br>
+    <input type="file" name="file" accept=".txt">
+    <br>
+    <input type="submit" value="Convert to Excel">
+    </form>
+    </div>
     </body>
     </html>
     """
 
-@app.route("/convert", methods=["POST"])
+def parse_mcqs(text):
+    text = text.replace('\r\n', '\n').replace('\r','\n')
+    lines = text.split('\n')
+
+    rows = []  
+    qno = None  
+    qtext_lines = []  
+    opts = {}  
+    answer = None  
+    in_options = False  
+
+    for line in lines:  
+        line = line.strip()  
+        if not line:  
+            continue  
+
+        # Option lines  
+        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)  
+        if m_opt:  
+            opts[m_opt.group(1).lower()] = m_opt.group(2)  
+            in_options = True  
+            continue  
+
+        # Answer line like 3.B  
+        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)  
+        if m_ans:  
+            answer = m_ans.group(1).upper()  
+            in_options = False  
+            continue  
+
+        # New question line: only if previous question has options and answer  
+        m_q = re.match(r'^(\d+)\.(.*)', line)  
+        if m_q and opts and answer:  
+            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"  
+            rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])  
+            # Start new question  
+            qno = m_q.group(1)  
+            qtext_lines = [m_q.group(2).strip()]  
+            opts = {}  
+            answer = None  
+            in_options = False  
+            continue  
+
+        # First question or continuation  
+        if qno is None:  
+            m_q_start = re.match(r'^(\d+)\.(.*)', line)  
+            if m_q_start:  
+                qno = m_q_start.group(1)  
+                qtext_lines = [m_q_start.group(2).strip()]  
+            continue  
+        elif not in_options:  
+            qtext_lines.append(line)  
+
+    # Add last question  
+    if qno and opts and answer:  
+        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"  
+        rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])  
+
+    return rows
+
+@app.route('/convert', methods=['POST'])
 def convert():
-    text = request.form["mcqs"]
+    text = request.form.get("mcq_text", "").strip()
+    if not text and 'file' in request.files:
+        file = request.files['file']
+        if file and file.filename != '':
+            try:
+                text = file.read().decode('utf-8')
+            except UnicodeDecodeError:
+                return "Failed to read the uploaded file. Ensure UTF-8 encoding.", 400
 
-    # --- Extract answers like 1.C, 2.A, 3.D ---
-    answer_pattern = r"(\d+)\.([A-Da-d])"
-    answers = dict((int(num), letter.upper()) for num, letter in re.findall(answer_pattern, text))
+    if not text:  
+        return "No text or file provided!", 400  
 
-    # --- Extract question blocks ---
-    # Capture text starting with "1." until next number
-    question_pattern = r"(\d+)\.(.*?)(?=\n\d+\.|$)"
-    question_blocks = re.findall(question_pattern, text, re.DOTALL)
+    rows = parse_mcqs(text)  
+    if not rows:  
+        return "No valid MCQs found.", 400  
 
-    rows = []
-    for qnum, block in question_blocks:
-        qnum = int(qnum)
-        block = block.strip()
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])  
+    output = io.BytesIO()  
+    df.to_excel(output, index=False)  
+    output.seek(0)  
+    return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
-        # Split question + options
-        # Look for lines starting with a/b/c/d
-        options = re.findall(r"[\na-d][\)\:\-\.]\s*(.*)", block, re.IGNORECASE)
-        question_text = re.split(r"\n\s*[a-d][\)\:\-]", block, 1, re.IGNORECASE)[0].strip()
-
-        if len(options) < 4:
-            # Skip if options not found properly
-            continue
-
-        # Rebuild full question with options
-        question_full = (
-            f"{question_text.strip()}\n"
-            f"a) {options[0].strip()}\n"
-            f"b) {options[1].strip()}\n"
-            f"c) {options[2].strip()}\n"
-            f"d) {options[3].strip()}"
-        )
-
-        # Find correct answer number
-        correct_letter = answers.get(qnum, "")
-        correct_num = {"A": 1, "B": 2, "C": 3, "D": 4}.get(correct_letter, "")
-
-        # Fill Excel row (B=question, G=correct)
-        row = ["", question_full, "", "", "", "", correct_num, "", "", ""]
-        rows.append(row)
-
-    # --- Create Excel ---
-    df = pd.DataFrame(rows, columns=list("ABCDEFGHIJ"))
-    output = io.BytesIO()
-    df.to_excel(output, index=False, header=False)
-    output.seek(0)
-
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="mcqs.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000, debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=3000)
