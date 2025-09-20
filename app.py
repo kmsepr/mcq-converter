@@ -58,7 +58,6 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
-    explanation_lines = []
     collecting_expl = False
 
     for i, line in enumerate(lines):
@@ -81,29 +80,24 @@ def parse_mcqs(text):
             qtext_lines = [m_q.group(1).strip()]
             continue
 
-        # Collect explanation lines
-        if collecting_expl:
-            explanation_lines.append(line)
-        else:
+        if not collecting_expl:
             qtext_lines.append(line)
 
         # Finalize when we hit a new question or end of input
         if collecting_expl and (i == len(lines)-1 or re.match(r'^\d+\.', lines[i+1])):
-            # Build question with options inside
             question_full = "\n".join(qtext_lines).strip()
             question_full += "\n" + \
                 f"A) {opts.get('A','')}\nB) {opts.get('B','')}\nC) {opts.get('C','')}\nD) {opts.get('D','')}"
 
             rows.append([
-                1,                                      # Column A (always 1)
+                1,                                      # Column A
                 question_full,                          # Column B (question + options)
                 "A", "B", "C", "D",                     # Columns C–F
                 {"A":1,"B":2,"C":3,"D":4}[answer],      # Column G (correct option index)
-                "\n".join(explanation_lines).strip(),   # Column H (explanation)
-                ""                                      # Column I (image URL, blank)
+                ""                                      # Column H (image URL, kept blank)
             ])
             # Reset for next question
-            qtext_lines, opts, answer, explanation_lines, collecting_expl = [], {}, None, [], False
+            qtext_lines, opts, answer, collecting_expl = [], {}, None, False
 
     return rows
 
