@@ -58,4 +58,4 @@ def convert():
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=3000)
