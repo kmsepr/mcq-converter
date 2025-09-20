@@ -55,49 +55,49 @@ def parse_mcqs(text):
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
     rows = []
+    qno = None
     qtext_lines = []
     opts = {}
     answer = None
-    collecting_expl = False
 
-    for i, line in enumerate(lines):
-        # Match option lines (A,B,C,D)
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.\s]+\s*(.*)', line)
-        if m_opt and not collecting_expl:
-            opts[m_opt.group(1).upper()] = m_opt.group(2).strip()
+    for line in lines:
+        # Match option lines (A-D or a-d in () or .)
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines (e.g., 1.C or 1.D)
+        # Match answer lines (e.g., 12.C or 12.c)
         m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(1).upper()
-            collecting_expl = True
+            # Save question
+            if qno and opts and answer:
+                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([
+                    1,
+                    question_full,
+                    'A','B','C','D',
+                    {"A":1,"B":2,"C":3,"D":4}[answer]
+                ])
+            # Reset
+            qno = None
+            qtext_lines = []
+            opts = {}
+            answer = None
             continue
 
-        # Match question start (strip leading number like "1.")
-        m_q = re.match(r'^\d+\.(.*)', line)
-        if m_q and not collecting_expl and not opts:
-            qtext_lines = [m_q.group(1).strip()]
+        # Match question start (e.g., 11. or 12.)
+        m_q = re.match(r'^(\d+)\.(.*)', line)
+        if m_q:
+            qno = m_q.group(1)
+            qtext_lines = [m_q.group(2).strip()]
             continue
 
-        if not collecting_expl:
+        # Continuation of question text
+        if qno:
             qtext_lines.append(line)
-
-        # Finalize when we hit a new question or end of input
-        if collecting_expl and (i == len(lines)-1 or re.match(r'^\d+\.', lines[i+1])):
-            question_full = "\n".join(qtext_lines).strip()
-            question_full += "\n" + \
-                f"A) {opts.get('A','')}\nB) {opts.get('B','')}\nC) {opts.get('C','')}\nD) {opts.get('D','')}"
-
-            rows.append([
-                1,                                      # Column A
-                question_full,                          # Column B (question + options)
-                "A", "B", "C", "D",                     # Columns C–F
-                {"A":1,"B":2,"C":3,"D":4}[answer],      # Column G (correct option index)
-                ""                                      # Column H (image URL, kept blank)
-            ])
-            # Reset for next question
-            qtext_lines, opts, answer, collecting_expl = [], {}, None, False
 
     return rows
 
@@ -108,20 +108,15 @@ def convert():
         return "No text provided!", 400
 
     rows = parse_mcqs(text)
+
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
-    # Write WITHOUT headers
-    df.to_excel(output, index=False, header=False, engine="openpyxl")
+    df.to_excel(output, index=False)
     output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="mcqs.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
