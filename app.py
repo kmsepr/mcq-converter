@@ -114,7 +114,8 @@ def convert():
 
     df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
-    df.to_excel(output, index=False)
+    # ✅ Export without headers
+    df.to_excel(output, index=False, header=False)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
