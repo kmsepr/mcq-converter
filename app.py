@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import io
 
-app = Flask(__name__)  # use __name__ instead of name
+app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def index():
@@ -13,35 +13,38 @@ def index():
     <head>
     <title>MCQ Converter</title>
     <style>
-    body { display: flex; justify-content: center; align-items: center;
-    height: 100vh; font-family: Arial, sans-serif;
-    background: linear-gradient(135deg, #4facfe, #00f2fe); margin: 0; }
-    .container { text-align: center; background: white; padding: 50px;
-    border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-    width: 700px; max-width: 95%; }
-    h1 { font-size: 42px; margin-bottom: 20px; color: #222; }
-    p { font-size: 18px; color: #555; margin-bottom: 20px; }
-    textarea { width: 100%; height: 200px; padding: 15px; font-size: 16px;
-    border-radius: 10px; border: 1px solid #ccc; resize: vertical;
-    margin-bottom: 20px; }
-    input[type=file] { margin: 15px 0; font-size: 16px; }
-    input[type=submit] { margin-top: 20px; background: #007bff; color: white;
-    border: none; padding: 15px 30px; font-size: 18px;
-    border-radius: 10px; cursor: pointer; transition: 0.3s; }
+    body {
+        display: flex; justify-content: center; align-items: center;
+        height: 100vh; font-family: Arial, sans-serif;
+        background: linear-gradient(135deg, #4facfe, #00f2fe); margin: 0;
+    }
+    .container {
+        text-align: center; background: white; padding: 40px;
+        border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+        width: 80%; max-width: 900px;
+    }
+    h1 { font-size: 36px; margin-bottom: 20px; color: #222; }
+    textarea {
+        width: 100%; height: 400px; padding: 15px; font-size: 16px;
+        border-radius: 10px; border: 1px solid #ccc; resize: vertical;
+        margin-bottom: 20px;
+    }
+    input[type=submit] {
+        margin-top: 20px; background: #007bff; color: white;
+        border: none; padding: 15px 30px; font-size: 18px;
+        border-radius: 10px; cursor: pointer; transition: 0.3s;
+    }
     input[type=submit]:hover { background: #0056b3; }
     </style>
     </head>
     <body>
     <div class="container">
-    <h1>📘 MCQ to Excel Converter</h1>
-    <p>Paste your MCQs or upload a .txt file.</p>
-    <form method="post" action="/convert" enctype="multipart/form-data">
-    <textarea name="mcq_text" placeholder="Paste your questions here..."></textarea>
-    <br>
-    <input type="file" name="file" accept=".txt">
-    <br>
-    <input type="submit" value="Convert to Excel">
-    </form>
+        <h1>📘 MCQ to Excel Converter</h1>
+        <form method="post" action="/convert">
+            <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea>
+            <br>
+            <input type="submit" value="Convert to Excel">
+        </form>
     </div>
     </body>
     </html>
@@ -49,88 +52,70 @@ def index():
 
 def parse_mcqs(text):
     text = text.replace('\r\n', '\n').replace('\r','\n')
-    lines = text.split('\n')
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
 
-    rows = []  
-    qno = None  
-    qtext_lines = []  
-    opts = {}  
-    answer = None  
-    in_options = False  
+    rows = []
+    qno = None
+    qtext_lines = []
+    opts = {}
+    answer = None
 
-    for line in lines:  
-        line = line.strip()  
-        if not line:  
-            continue  
+    for line in lines:
+        # Match option lines (A-D or a-d in () or .)
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
+            continue
 
-        # Option lines  
-        m_opt = re.match(r'^([a-dA-D])\)\s*(.*)', line)  
-        if m_opt:  
-            opts[m_opt.group(1).lower()] = m_opt.group(2)  
-            in_options = True  
-            continue  
+        # Match answer lines (e.g., 12.C or 12.c)
+        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        if m_ans:
+            answer = m_ans.group(1).upper()
+            # Save question
+            if qno and opts and answer:
+                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([
+                    1,
+                    question_full,
+                    'A','B','C','D',
+                    {"A":1,"B":2,"C":3,"D":4}[answer]
+                ])
+            # Reset
+            qno = None
+            qtext_lines = []
+            opts = {}
+            answer = None
+            continue
 
-        # Answer line like 3.B  
-        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)  
-        if m_ans:  
-            answer = m_ans.group(1).upper()  
-            in_options = False  
-            continue  
+        # Match question start (e.g., 11. or 12.)
+        m_q = re.match(r'^(\d+)\.(.*)', line)
+        if m_q:
+            qno = m_q.group(1)
+            qtext_lines = [m_q.group(2).strip()]
+            continue
 
-        # New question line: only if previous question has options and answer  
-        m_q = re.match(r'^(\d+)\.(.*)', line)  
-        if m_q and opts and answer:  
-            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"  
-            rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])  
-            # Start new question  
-            qno = m_q.group(1)  
-            qtext_lines = [m_q.group(2).strip()]  
-            opts = {}  
-            answer = None  
-            in_options = False  
-            continue  
-
-        # First question or continuation  
-        if qno is None:  
-            m_q_start = re.match(r'^(\d+)\.(.*)', line)  
-            if m_q_start:  
-                qno = m_q_start.group(1)  
-                qtext_lines = [m_q_start.group(2).strip()]  
-            continue  
-        elif not in_options:  
-            qtext_lines.append(line)  
-
-    # Add last question  
-    if qno and opts and answer:  
-        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"  
-        rows.append([1, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])  
+        # Continuation of question text
+        if qno:
+            qtext_lines.append(line)
 
     return rows
 
 @app.route('/convert', methods=['POST'])
 def convert():
     text = request.form.get("mcq_text", "").strip()
-    if not text and 'file' in request.files:
-        file = request.files['file']
-        if file and file.filename != '':
-            try:
-                text = file.read().decode('utf-8')
-            except UnicodeDecodeError:
-                return "Failed to read the uploaded file. Ensure UTF-8 encoding.", 400
+    if not text:
+        return "No text provided!", 400
 
-    if not text:  
-        return "No text or file provided!", 400  
+    rows = parse_mcqs(text)
 
-    rows = parse_mcqs(text)  
-    if not rows:  
-        return "No valid MCQs found.", 400  
+    if not rows:
+        return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])  
-    output = io.BytesIO()  
-    df.to_excel(output, index=False)  
-    output.seek(0)  
+    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
+    output = io.BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
 if __name__ == '__main__':
