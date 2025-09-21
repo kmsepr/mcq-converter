@@ -76,10 +76,10 @@ def parse_mcqs(text):
                 question_full = '\n'.join(qtext_lines).strip() + '\n' + \
                     f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
                 rows.append([
-                    1,
+                    qno,  # actual question number as Sl.No
                     question_full,
-                    'A','B','C','D',
-                    {"A":1,"B":2,"C":3,"D":4}[answer]
+                    'A','B','C','D',  # static option letters
+                    {"A":1,"B":2,"C":3,"D":4}[answer]  # numeric correct answer
                 ])
             # Reset
             qno = None
@@ -112,9 +112,9 @@ def convert():
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["1","Question","A","B","C","D","Correct Answer"])
+    df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
-    df.to_excel(output, index=False)
+    df.to_excel(output, index=False, header=False)  # No header row
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
