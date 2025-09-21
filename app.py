@@ -61,22 +61,22 @@ def parse_mcqs(text):
     answer = None
 
     for line in lines:
-        # Match option lines (A-D or a-d in () or .)
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\.]\s*(.*)', line)
+        # Match option lines (A-D) with formats: "A)", "A:", "A:-", lowercase too
+        m_opt = re.match(r'^([a-dA-D])[\)\:\-]*\s*(.*)', line)
         if m_opt:
             opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines (e.g., 12.C or 12.c)
-        m_ans = re.match(r'^\d+\.\s*([A-Da-d])$', line)
+        # Match answer lines (e.g., 30.C or 31.b)
+        m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
         if m_ans:
-            answer = m_ans.group(1).upper()
-            # Save question
-            if qno and opts and answer:
+            answer = m_ans.group(2).upper()
+            qno = m_ans.group(1)  # actual question number
+            if opts and answer:
                 question_full = '\n'.join(qtext_lines).strip() + '\n' + \
                     f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
                 rows.append([
-                    qno,  # actual question number as Sl.No
+                    qno,  # actual question number
                     question_full,
                     'A','B','C','D',  # static option letters
                     {"A":1,"B":2,"C":3,"D":4}[answer]  # numeric correct answer
@@ -88,7 +88,7 @@ def parse_mcqs(text):
             answer = None
             continue
 
-        # Match question start (e.g., 11. or 12.)
+        # Match question start (e.g., 30. or 31.)
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q:
             qno = m_q.group(1)
