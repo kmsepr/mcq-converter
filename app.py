@@ -38,48 +38,6 @@ def index():
     </html>
     """
 
-def parse_mcqs(text):
-    text = text.replace('\r\n', '\n').replace('\r','\n')
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    rows = []
-    qno = None
-    qtext_lines = []
-    opts = {}
-    answer = None
-
-    for line in lines:
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
-        if m_opt:
-            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
-            continue
-        m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
-        if m_ans:
-            answer = m_ans.group(2).upper()
-            qno = m_ans.group(1)
-            if opts and answer:
-                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                rows.append([
-                    qno,
-                    question_full,
-                    'A','B','C','D',
-                    {"A":1,"B":2,"C":3,"D":4}[answer]
-                ])
-            qno = None
-            qtext_lines = []
-            opts = {}
-            answer = None
-            continue
-        m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q:
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
-            continue
-        if qno:
-            qtext_lines.append(line)
-
-    return rows
-
 def extract_text_from_epub(file):
     book = epub.read_epub(file)
     text = ''
@@ -89,11 +47,50 @@ def extract_text_from_epub(file):
             text += soup.get_text() + '\n'
     return text
 
+def smart_parse_mcqs(text):
+    text = text.replace('\r\n', '\n').replace('\r','\n')
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    rows = []
+    qno = None
+    qtext_lines = []
+    opts = {}
+    answer = None
+
+    for line in lines:
+        # Detect options like A) , B: , a) , (c) etc.
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]\s*(.*)', line)
+        if m_opt:
+            opts[m_opt.group(1).upper()] = m_opt.group(2).strip()
+            continue
+
+        # Detect answers like "Answer: C" or "Ans: B" or "1.C"
+        m_ans = re.match(r'^(Answer|Ans)[:\s]*([A-Da-d])$', line, re.IGNORECASE)
+        if m_ans:
+            answer = m_ans.group(2).upper()
+            if qno and opts and answer:
+                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                                f"A) {opts.get('A','')}\nB) {opts.get('B','')}\nC) {opts.get('C','')}\nD) {opts.get('D','')}"
+                rows.append([qno, question_full, 'A','B','C','D', {"A":1,"B":2,"C":3,"D":4}[answer]])
+            qno = None; qtext_lines=[]; opts={}; answer=None
+            continue
+
+        # Detect question number at start like "1. ..." or "12. ..."
+        m_q = re.match(r'^(\d+)\.\s*(.*)', line)
+        if m_q:
+            qno = m_q.group(1)
+            qtext_lines = [m_q.group(2).strip()]
+            continue
+
+        # Continuation of question text
+        if qno:
+            qtext_lines.append(line)
+
+    return rows
+
 @app.route('/convert', methods=['POST'])
 def convert():
     text = request.form.get("mcq_text", "").strip()
 
-    # Check if EPUB file uploaded
     if 'mcq_epub' in request.files and request.files['mcq_epub'].filename:
         epub_file = request.files['mcq_epub']
         text += '\n' + extract_text_from_epub(epub_file)
@@ -101,9 +98,9 @@ def convert():
     if not text.strip():
         return "No text or EPUB provided!", 400
 
-    rows = parse_mcqs(text)
+    rows = smart_parse_mcqs(text)
     if not rows:
-        return "Could not parse any MCQs. Please check format.", 400
+        return "Could not parse any MCQs. Make sure EPUB contains questions in recognizable format.", 400
 
     df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer"])
     output = io.BytesIO()
