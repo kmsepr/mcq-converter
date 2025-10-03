@@ -59,45 +59,78 @@ def parse_mcqs(text):
     qtext_lines = []
     opts = {}
     answer = None
+    explanation_lines = []
+    capturing_expl = False
 
     for line in lines:
-        # Match option lines: A), A:, A:-, (a), a), a:, a:- etc.
+        # Match option lines: A), A:, (a), etc.
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
-        if m_opt:
+        if m_opt and not capturing_expl:
             opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
             continue
 
-        # Match answer lines like 30.C or 31.b
+        # Match answer lines like 1.C or 31.b
         m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(2).upper()
-            qno = m_ans.group(1)  # actual question number
-            if opts and answer:
-                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                rows.append([
-                    qno,  # actual question number
-                    question_full,
-                    'A','B','C','D',  # static option letters
-                    {"A":1,"B":2,"C":3,"D":4}[answer]  # numeric correct answer
-                ])
-            # Reset
-            qno = None
-            qtext_lines = []
-            opts = {}
-            answer = None
+            qno = m_ans.group(1)
+            capturing_expl = True  # start explanation after this line
+            explanation_lines = []
             continue
 
-        # Match question start: e.g., 30. or 31.
+        # If we are in explanation mode
+        if capturing_expl:
+            # Stop if we encounter a new question
+            if re.match(r'^\d+\.', line):
+                # finalize previous question before starting new one
+                if opts and answer:
+                    question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                        f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                    rows.append([
+                        qno,
+                        question_full,
+                        'A','B','C','D',
+                        {"A":1,"B":2,"C":3,"D":4}[answer],
+                        ' '.join(explanation_lines).strip()
+                    ])
+                # reset state for new question
+                qno = None
+                qtext_lines = []
+                opts = {}
+                answer = None
+                capturing_expl = False
+                # treat this line as a new question start
+                m_q = re.match(r'^(\d+)\.(.*)', line)
+                if m_q:
+                    qno = m_q.group(1)
+                    qtext_lines = [m_q.group(2).strip()]
+                continue
+            else:
+                explanation_lines.append(line)
+                continue
+
+        # Match question start
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             continue
 
-        # Continuation of question text
+        # Continuation of question
         if qno:
             qtext_lines.append(line)
+
+    # flush last one
+    if opts and answer:
+        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+        rows.append([
+            qno,
+            question_full,
+            'A','B','C','D',
+            {"A":1,"B":2,"C":3,"D":4}[answer],
+            ' '.join(explanation_lines).strip()
+        ])
 
     return rows
 
@@ -112,9 +145,9 @@ def convert():
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer"])
+    df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer","Explanation"])
     output = io.BytesIO()
-    df.to_excel(output, index=False, header=False)  # No header row
+    df.to_excel(output, index=False, header=False)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
