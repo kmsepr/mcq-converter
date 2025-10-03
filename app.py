@@ -145,9 +145,28 @@ def convert():
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer","Explanation"])
+    df = pd.DataFrame(
+        rows,
+        columns=["Sl.No","Question","A","B","C","D","Correct Answer","Explanation"]
+    )
+
     output = io.BytesIO()
-    df.to_excel(output, index=False, header=False)
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, header=False, sheet_name="MCQs")
+
+        # Get sheet and workbook
+        worksheet = writer.sheets["MCQs"]
+        workbook = writer.book
+
+        # Create wrap format
+        wrap_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
+
+        # Apply wrap to Explanation column (H → 7 index since 0-based)
+        worksheet.set_column(7, 7, 60, wrap_format)  
+
+        # Optional: widen Question column also
+        worksheet.set_column(1, 1, 50, wrap_format)
+
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
