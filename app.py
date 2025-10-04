@@ -63,10 +63,13 @@ def parse_mcqs(text):
     capturing_expl = False
 
     for line in lines:
-        # Match option lines: A), A:, (a), etc.
+        # ✅ Match option lines: A), A:, (a), etc.
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
         if m_opt and not capturing_expl:
-            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
+            opt_text = m_opt.group(2).strip()
+            # 🧹 Clean unwanted punctuation after the option letter
+            opt_text = re.sub(r'^[\.\)\:\-\s]+', '', opt_text)
+            opts[m_opt.group(1).lower()] = opt_text
             continue
 
         # Match answer lines like 1.C or 31.b
