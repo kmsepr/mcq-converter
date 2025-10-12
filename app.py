@@ -51,7 +51,7 @@ def index():
     """
 
 def parse_mcqs(text):
-    text = text.replace('\r\n', '\n').replace('\r','\n')
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
     rows = []
@@ -60,71 +60,56 @@ def parse_mcqs(text):
     opts = {}
     answer = None
     explanation_lines = []
-    capturing_expl = False
 
     for line in lines:
-        # ✅ Match option lines: A), A:, (a), etc.
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
-        if m_opt and not capturing_expl:
-            opt_text = m_opt.group(2).strip()
-            # 🧹 Clean unwanted punctuation after the option letter
-            opt_text = re.sub(r'^[\.\)\:\-\s]+', '', opt_text)
-            opts[m_opt.group(1).lower()] = opt_text
-            continue
-
-        # Match answer lines like 1.C or 31.b
-        m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
-        if m_ans:
-            answer = m_ans.group(2).upper()
-            qno = m_ans.group(1)
-            capturing_expl = True  # start explanation after this line
+        # ✅ Detect new question start — e.g. "1:-", "12 -", "3."
+        m_q = re.match(r'^(\d+)\s*[\.\:\-\–]\s*(.*)', line)
+        if m_q:
+            # flush previous question before starting new one
+            if qno and opts and answer:
+                question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                    f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                rows.append([
+                    qno,
+                    question_full,
+                    'A','B','C','D',
+                    {"A":1,"B":2,"C":3,"D":4}[answer],
+                    ' '.join(explanation_lines).strip()
+                ])
+            # reset all states for next question
+            qno = m_q.group(1)
+            qtext_lines = [m_q.group(2).strip()]
+            opts = {}
+            answer = None
             explanation_lines = []
             continue
 
-        # If we are in explanation mode
-        if capturing_expl:
-            # Stop if we encounter a new question
-            if re.match(r'^\d+\.', line):
-                # finalize previous question before starting new one
-                if opts and answer:
-                    question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                        f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                    rows.append([
-                        qno,
-                        question_full,
-                        'A','B','C','D',
-                        {"A":1,"B":2,"C":3,"D":4}[answer],
-                        ' '.join(explanation_lines).strip()
-                    ])
-                # reset state for new question
-                qno = None
-                qtext_lines = []
-                opts = {}
-                answer = None
-                capturing_expl = False
-                # treat this line as a new question start
-                m_q = re.match(r'^(\d+)\.(.*)', line)
-                if m_q:
-                    qno = m_q.group(1)
-                    qtext_lines = [m_q.group(2).strip()]
-                continue
-            else:
-                explanation_lines.append(line)
-                continue
-
-        # Match question start
-        m_q = re.match(r'^(\d+)[\.\:\-\–]\s*(.*)', line)
-        if m_q:
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
+        # ✅ Detect option lines like "A:-", "B:-", "A:" etc.
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-\–\.]*\s*(.*)', line)
+        if m_opt:
+            letter = m_opt.group(1).lower()
+            text_opt = m_opt.group(2).strip()
+            opts[letter] = text_opt
             continue
 
-        # Continuation of question
-        if qno:
-            qtext_lines.append(line)
+        # ✅ Detect answer lines like "1.B", "6.B", "3.a", or "6.B v"
+        m_ans = re.match(r'^(\d+)\s*[\.\:\-]\s*([A-Da-d])\b', line)
+        if m_ans:
+            answer = m_ans.group(2).upper()
+            continue
 
-    # flush last one
-    if opts and answer:
+        # ✅ Skip simple lines like "v" (PSC uses this after answers)
+        if line.lower() == 'v':
+            continue
+
+        # ✅ Anything else belongs to question continuation or explanation
+        if qno and not answer:
+            qtext_lines.append(line)
+        elif qno and answer:
+            explanation_lines.append(line)
+
+    # ✅ Flush last question
+    if qno and opts and answer:
         question_full = '\n'.join(qtext_lines).strip() + '\n' + \
             f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
         rows.append([
