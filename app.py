@@ -51,7 +51,7 @@ def index():
     """
 
 def parse_mcqs(text):
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace('\r\n', '\n').replace('\r','\n')
     lines = [l.strip() for l in text.split('\n') if l.strip()]
 
     rows = []
@@ -62,49 +62,47 @@ def parse_mcqs(text):
     explanation_lines = []
     capturing_expl = False
 
-    def flush_question():
-        """Save current question to rows"""
-        if qno and opts and answer:
-            question_full = '\n'.join(qtext_lines).strip() + '\n' + \
-                f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-            rows.append([
-                qno,
-                question_full,
-                opts.get('a', ''),
-                opts.get('b', ''),
-                opts.get('c', ''),
-                opts.get('d', ''),
-                {"A": 1, "B": 2, "C": 3, "D": 4}.get(answer, ''),
-                ' '.join(explanation_lines).strip()
-            ])
-
     for line in lines:
-        # Option lines
-        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\.\-\s]+(.*)', line)
+        # ✅ Match option lines: A), A:, (a), etc.
+        m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
         if m_opt and not capturing_expl:
-            opts[m_opt.group(1).lower()] = m_opt.group(2).strip()
+            opt_text = m_opt.group(2).strip()
+            # 🧹 Clean unwanted punctuation after the option letter
+            opt_text = re.sub(r'^[\.\)\:\-\s]+', '', opt_text)
+            opts[m_opt.group(1).lower()] = opt_text
             continue
 
-        # Answer line like 25.C
+        # Match answer lines like 1.C or 31.b
         m_ans = re.match(r'^(\d+)\.\s*([A-Da-d])$', line)
         if m_ans:
             answer = m_ans.group(2).upper()
-            capturing_expl = True
+            qno = m_ans.group(1)
+            capturing_expl = True  # start explanation after this line
             explanation_lines = []
             continue
 
-        # If capturing explanation
+        # If we are in explanation mode
         if capturing_expl:
-            # New question starts
+            # Stop if we encounter a new question
             if re.match(r'^\d+\.', line):
-                flush_question()
-                # Reset
+                # finalize previous question before starting new one
+                if opts and answer:
+                    question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+                        f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+                    rows.append([
+                        qno,
+                        question_full,
+                        'A','B','C','D',
+                        {"A":1,"B":2,"C":3,"D":4}[answer],
+                        ' '.join(explanation_lines).strip()
+                    ])
+                # reset state for new question
+                qno = None
                 qtext_lines = []
                 opts = {}
                 answer = None
                 capturing_expl = False
-                explanation_lines = []
-                # New question start
+                # treat this line as a new question start
                 m_q = re.match(r'^(\d+)\.(.*)', line)
                 if m_q:
                     qno = m_q.group(1)
@@ -114,19 +112,29 @@ def parse_mcqs(text):
                 explanation_lines.append(line)
                 continue
 
-        # Question start
+        # Match question start
         m_q = re.match(r'^(\d+)\.(.*)', line)
         if m_q:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             continue
 
-        # Continuation lines
+        # Continuation of question
         if qno:
             qtext_lines.append(line)
 
-    # Flush last question
-    flush_question()
+    # flush last one
+    if opts and answer:
+        question_full = '\n'.join(qtext_lines).strip() + '\n' + \
+            f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
+        rows.append([
+            qno,
+            question_full,
+            'A','B','C','D',
+            {"A":1,"B":2,"C":3,"D":4}[answer],
+            ' '.join(explanation_lines).strip()
+        ])
+
     return rows
 
 @app.route('/convert', methods=['POST'])
@@ -136,12 +144,11 @@ def convert():
         return "No text provided!", 400
 
     rows = parse_mcqs(text)
+
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
-    df = pd.DataFrame(rows, columns=[
-        "Sl.No", "Question", "A", "B", "C", "D", "Correct Answer", "Explanation"
-    ])
+    df = pd.DataFrame(rows, columns=["Sl.No","Question","A","B","C","D","Correct Answer","Explanation"])
     output = io.BytesIO()
     df.to_excel(output, index=False, header=False)
     output.seek(0)
