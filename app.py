@@ -113,7 +113,7 @@ def parse_mcqs(text):
                 continue
 
         # Match question start
-        m_q = re.match(r'^(\d+)\.(.*)', line)
+        m_q = re.match(r'^(\d+)[\.\:\-\–]\s*(.*)', line)
         if m_q:
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
