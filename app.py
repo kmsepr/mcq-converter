@@ -62,10 +62,10 @@ def parse_mcqs(text):
     explanation_lines = []
 
     for line in lines:
-        # ✅ Detect new question start — e.g. "1:-", "12 -", "3."
-        m_q = re.match(r'^(\d+)\s*[\.\:\-\–]\s*(.*)', line)
-        if m_q:
-            # flush previous question before starting new one
+        # ✅ Detect new question start — supports "1.", "1:", "1:-", "1 -", "1–", etc.
+        m_q = re.match(r'^(\d+)\s*[\.\:\-\–]?\s*(?:-|:)?\s*(.*)', line)
+        if m_q and m_q.group(2).strip():
+            # flush previous question
             if qno and opts and answer:
                 question_full = '\n'.join(qtext_lines).strip() + '\n' + \
                     f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
@@ -76,7 +76,7 @@ def parse_mcqs(text):
                     {"A":1,"B":2,"C":3,"D":4}[answer],
                     ' '.join(explanation_lines).strip()
                 ])
-            # reset all states for next question
+            # reset all states
             qno = m_q.group(1)
             qtext_lines = [m_q.group(2).strip()]
             opts = {}
@@ -84,7 +84,7 @@ def parse_mcqs(text):
             explanation_lines = []
             continue
 
-        # ✅ Detect option lines like "A:-", "B:-", "A:" etc.
+        # ✅ Detect options like "A:", "B:-", "(C)", etc.
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-\–\.]*\s*(.*)', line)
         if m_opt:
             letter = m_opt.group(1).lower()
@@ -92,17 +92,17 @@ def parse_mcqs(text):
             opts[letter] = text_opt
             continue
 
-        # ✅ Detect answer lines like "1.B", "6.B", "3.a", or "6.B v"
-        m_ans = re.match(r'^(\d+)\s*[\.\:\-]\s*([A-Da-d])\b', line)
+        # ✅ Detect answers like "1.B", "6:B", "6 - B", or "1:B v"
+        m_ans = re.match(r'^(\d+)\s*[\.\:\-\–]\s*([A-Da-d])\b', line)
         if m_ans:
             answer = m_ans.group(2).upper()
             continue
 
-        # ✅ Skip simple lines like "v" (PSC uses this after answers)
+        # ✅ Ignore "v" dummy explanation lines
         if line.lower() == 'v':
             continue
 
-        # ✅ Anything else belongs to question continuation or explanation
+        # ✅ Add to question or explanation
         if qno and not answer:
             qtext_lines.append(line)
         elif qno and answer:
@@ -129,7 +129,6 @@ def convert():
         return "No text provided!", 400
 
     rows = parse_mcqs(text)
-
     if not rows:
         return "Could not parse any MCQs. Please check format.", 400
 
