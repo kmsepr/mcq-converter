@@ -1,26 +1,39 @@
-# Use a lightweight Python base image
+# ==============================================================
+# 🐍 Base image
+# ==============================================================
 FROM python:3.11-slim
 
-# Prevent Python from buffering stdout/stderr
-ENV PYTHONUNBUFFERED=1
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies: ffmpeg and wget (for yt-dlp)
+# --------------------------------------------------------------
+# 🧩 Install system dependencies (ffmpeg + yt-dlp prerequisites)
+# --------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg wget \
+    ffmpeg wget curl git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# --------------------------------------------------------------
+# 🧰 Install Python dependencies
+# --------------------------------------------------------------
+WORKDIR /app
 
-# Copy app source code
-COPY . .
+# Copy requirement libraries (you can also use requirements.txt)
+RUN pip install --no-cache-dir flask pandas openpyxl yt-dlp
 
-# Expose the Flask app port
+# --------------------------------------------------------------
+# 🧱 Copy app files
+# --------------------------------------------------------------
+COPY app.py /app/app.py
+
+# --------------------------------------------------------------
+# 🔧 Environment setup
+# --------------------------------------------------------------
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+
+# Create /mnt/data for logs and cache (Koyeb uses ephemeral filesystem)
+RUN mkdir -p /mnt/data
+
+# --------------------------------------------------------------
+# 🚀 Start server
+# --------------------------------------------------------------
 EXPOSE 8000
-
-# Default command to run the Flask app
 CMD ["python", "app.py"]
