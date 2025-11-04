@@ -171,6 +171,8 @@ PLAYLISTS = {
     "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
     "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
     "hindi_playlist": "https://youtube.com/playlist?list=PLlXSv-ic4-yJj2djMawc8XqqtCn1BVAc2",
+
+"eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
 }
 
 STREAMS_RADIO = {}
