@@ -328,9 +328,9 @@ def stream_audio(name):
 # ==============================================================
 
 if __name__ == "__main__":
-    for pname in PLAYLISTS:
+    for pname, url in PLAYLISTS.items():
         STREAMS_RADIO[pname] = {
-            "IDS": load_playlist_ids_radio(pname),
+            "IDS": load_playlist_ids_radio(pname, url),
             "INDEX": 0,
             "QUEUE": deque(),
             "LAST_REFRESH": time.time(),
