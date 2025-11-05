@@ -206,36 +206,34 @@ def save_cache_radio(data):
 
 CACHE_RADIO = load_cache_radio()
 
-def load_playlist_ids_radio(name, force=False):
-    now = time.time()
-    cached = CACHE_RADIO.get(name, {})
-    if not force and cached and now - cached.get("time", 0) < REFRESH_INTERVAL:
-        return cached["ids"]
-    url = PLAYLISTS[name]
+def load_playlist_ids_radio(name, url):
+    """Load and cache YouTube playlist IDs with safe mode handling."""
     try:
-        logging.info(f"[{name}] Refreshing playlist...")
-        res = subprocess.run(
-            ["yt-dlp", "--flat-playlist", "-J", url, "--cookies", COOKIES_PATH],
-            capture_output=True, text=True, check=True
-        )
-        data = json.loads(res.stdout)
-        ids = [e["id"] for e in data.get("entries", []) if "id" in e]
+        ids = get_playlist_ids(url)
+        if not ids:
+            logging.warning(f"[{name}] ⚠️ No videos found in playlist — using empty list.")
+            PLAYLIST_CACHE[name] = []
+            return []
 
-        # 🔁 Apply mode
-        mode = PLAY_MODES.get(name, "normal")
-        if mode == "reverse":
-            ids = ids[::-1]
-        elif mode == "shuffle":
+        mode = PLAY_MODES.get(name, "normal").lower().strip()
+
+        if mode == "shuffle":
             random.shuffle(ids)
+        elif mode == "reverse":
+            ids.reverse()
+        else:
+            mode = "normal"  # fallback if typo or invalid mode
 
-        CACHE_RADIO[name] = {"ids": ids, "time": now}
-        save_cache_radio(CACHE_RADIO)
+        # ✅ Always cache — even if mode fails — so playback won't break
+        PLAYLIST_CACHE[name] = ids
         logging.info(f"[{name}] Cached {len(ids)} videos in {mode.upper()} mode.")
         return ids
-    except Exception as e:
-        logging.error(f"[{name}] Playlist error: {e}")
-        return cached.get("ids", [])
 
+    except Exception as e:
+        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to normal order.")
+        ids = get_playlist_ids(url)
+        PLAYLIST_CACHE[name] = ids or []
+        return ids or []
 def stream_worker_radio(name):
     s = STREAMS_RADIO[name]
     while True:
