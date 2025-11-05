@@ -188,7 +188,7 @@ PLAY_MODES = {
 
 STREAMS_RADIO = {}
 MAX_QUEUE = 128
-REFRESH_INTERVAL = 1800  # 30 min
+REFRESH_INTERVAL = 10800  # 3 hr
 
 # ==============================================================
 # 🧩 Playlist Caching + Loader
@@ -355,6 +355,17 @@ def stream_audio(name):
                 time.sleep(0.05)
     return Response(stream_with_context(gen()), mimetype="audio/mpeg")
 
+def cache_refresher():
+    while True:
+        for name, url in PLAYLISTS.items():
+            last = STREAMS_RADIO[name]["LAST_REFRESH"]
+            if time.time() - last > REFRESH_INTERVAL:
+                logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
+                STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
+                STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
+        time.sleep(60)
+
+
 # ==============================================================
 # 🚀 START SERVER
 # ==============================================================
@@ -368,6 +379,9 @@ if __name__ == "__main__":
             "LAST_REFRESH": time.time(),
         }
         threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True).start()
+
+    # ✅ Start cache refresher thread properly
+    threading.Thread(target=cache_refresher, daemon=True).start()
 
     logging.info("🚀 Unified Flask App (Radio + MCQ Converter) running at http://0.0.0.0:8000")
     app.run(host="0.0.0.0", port=8000)
