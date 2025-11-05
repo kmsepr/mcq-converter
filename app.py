@@ -178,12 +178,12 @@ PLAYLISTS = {
 }
 
 PLAY_MODES = {
-    "kas_ranker": "shuffle",
-    "ca": "reverse",
-    "samastha": "normal",
+    "kas_ranker": "normal",
+    "ca": "shuffle",
+    "samastha": "shuffle",
     "hindi_playlist": "shuffle",
-    "eftguru": "reverse",
-    "firsts": "normal"
+    "eftguru": "shuffle",
+    "firsts": "reverse"
 }
 
 STREAMS_RADIO = {}
