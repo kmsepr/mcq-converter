@@ -178,7 +178,7 @@ PLAYLISTS = {
 
 "std_10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
 
-"std_9": "https://youtube.com/playlist?list=PLFMb-2_G0bMYWEI3ZJ4mQ8nXTxiEmSlvC",
+
 
 }
 
