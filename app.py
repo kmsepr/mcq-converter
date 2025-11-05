@@ -179,9 +179,7 @@ PLAYLISTS = {
 "std_10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
 
 "std_9": "https://youtube.com/playlist?list=PLFMb-2_G0bMYWEI3ZJ4mQ8nXTxiEmSlvC",
-"std_8": "https://youtube.com/playlist?list=PLFMb-2_G0bMZJGXj4ES9qulukFIFHImfl",
 
-"std_7": "https://youtube.com/playlist?list=PLFMb-2_G0bMYyE0vA5EfzgYMDoNu1Udex",
 }
 
 PLAY_MODES = {
@@ -193,8 +191,7 @@ PLAY_MODES = {
     
     "std_10": "shuffle",
     "std_9": "shuffle",
-    "std_8": "shuffle",
-    "std_7": "shuffle",
+    
 }
 
 STREAMS_RADIO = {}
