@@ -177,6 +177,15 @@ PLAYLISTS = {
 "firsts": "https://youtube.com/playlist?list=PLQ02IYL5pmhHFl7j6wPcFTZmlQvRhsejp",
 }
 
+PLAY_MODES = {
+    "kas_ranker": "shuffle",
+    "ca": "reverse",
+    "samastha": "normal",
+    "hindi_playlist": "shuffle",
+    "eftguru": "reverse",
+    "firsts": "normal"
+}
+
 STREAMS_RADIO = {}
 MAX_QUEUE = 128
 REFRESH_INTERVAL = 1800  # 30 min
@@ -210,10 +219,18 @@ def load_playlist_ids_radio(name, force=False):
             capture_output=True, text=True, check=True
         )
         data = json.loads(res.stdout)
-        ids = [e["id"] for e in data.get("entries", []) if "id" in e][::-1]
+        ids = [e["id"] for e in data.get("entries", []) if "id" in e]
+
+        # 🔁 Apply mode
+        mode = PLAY_MODES.get(name, "normal")
+        if mode == "reverse":
+            ids = ids[::-1]
+        elif mode == "shuffle":
+            random.shuffle(ids)
+
         CACHE_RADIO[name] = {"ids": ids, "time": now}
         save_cache_radio(CACHE_RADIO)
-        logging.info(f"[{name}] Cached {len(ids)} videos.")
+        logging.info(f"[{name}] Cached {len(ids)} videos in {mode.upper()} mode.")
         return ids
     except Exception as e:
         logging.error(f"[{name}] Playlist error: {e}")
