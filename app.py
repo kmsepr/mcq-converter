@@ -192,6 +192,9 @@ PLAY_MODES = {
     "eftguru": "shuffle",
     
     "std_10": "shuffle",
+    "std_9": "shuffle",
+    "std_8": "shuffle",
+    "std_7": "shuffle",
 }
 
 STREAMS_RADIO = {}
