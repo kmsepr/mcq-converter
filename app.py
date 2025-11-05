@@ -363,7 +363,7 @@ def cache_refresher():
                 logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
                 STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
                 STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
-        time.sleep(60)
+        time.sleep(1800)
 
 
 # ==============================================================
