@@ -174,6 +174,8 @@ PLAYLISTS = {
     "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
     "hindi_playlist": "https://youtube.com/playlist?list=PLlXSv-ic4-yJj2djMawc8XqqtCn1BVAc2",
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
+
+"dd": "https://youtube.com/playlist?list=PLjETElbIubzt1eVq5OVCmyiV6ai7aUP-z",
   
 
 
@@ -187,6 +189,7 @@ PLAY_MODES = {
     "samastha": "shuffle",
     "hindi_playlist": "shuffle",
     "eftguru": "shuffle",
+    "dd": "shuffle",
     
     
 }
