@@ -171,8 +171,7 @@ logging.getLogger().addHandler(handler)
 PLAYLISTS = {
     "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
     "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-    "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
-    "hindi_playlist": "https://youtube.com/playlist?list=PLlXSv-ic4-yJj2djMawc8XqqtCn1BVAc2",
+    
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
 
 "dd": "https://youtube.com/playlist?list=PLjETElbIubzt1eVq5OVCmyiV6ai7aUP-z",
@@ -186,8 +185,7 @@ PLAYLISTS = {
 PLAY_MODES = {
     "kas_ranker": "shuffle",
     "ca": "shuffle",
-    "samastha": "shuffle",
-    "hindi_playlist": "shuffle",
+    
     "eftguru": "shuffle",
     "dd": "shuffle",
     
