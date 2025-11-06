@@ -326,7 +326,7 @@ a:hover{background:#0f0;color:#000}
 <h2>🎶 YouTube Playlist Radio</h2>
 <a href="/mcq">🧠 Go to MCQ Converter</a>
 {% for p in playlists %}
-  <a href="/listen/{{p}}">▶ {{p|capitalize}}</a>
+  <a href="/stream/{{p}}">▶ {{p|capitalize}}</a>
 {% endfor %}
 </body></html>"""
     return render_template_string(html, playlists=playlists)
