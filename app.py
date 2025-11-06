@@ -182,8 +182,8 @@ PLAYLISTS = {
 }
 
 PLAY_MODES = {
-    "kas_ranker": "normal",
-    "ca": "normal",
+    "kas_ranker": "reverse",
+    "ca": "reverse",
     "samastha": "shuffle",
     "hindi_playlist": "shuffle",
     "eftguru": "shuffle",
