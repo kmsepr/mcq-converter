@@ -176,7 +176,6 @@ PLAYLISTS = {
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
   
 
-"std_10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
 
 
 
@@ -189,8 +188,7 @@ PLAY_MODES = {
     "hindi_playlist": "shuffle",
     "eftguru": "shuffle",
     
-    "std_10": "shuffle",
-   
+    
 }
 
 STREAMS_RADIO = {}
