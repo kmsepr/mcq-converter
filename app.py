@@ -278,45 +278,57 @@ def load_playlist_ids_radio(name, url):
 
 def stream_worker_radio(name):
     s = STREAMS_RADIO[name]
+    refresh_interval = 3600  # refresh playlist every 1 hour
+    last_refresh = 0
+
     while True:
         try:
-            ids = s["IDS"]
-            if not ids:
+            # =========================================================
+            # 🔄 Refresh playlist IDs periodically or if empty
+            # =========================================================
+            if not s.get("IDS") or (time.time() - last_refresh) > refresh_interval:
+                logging.info(f"[{name}] 🔁 Refreshing playlist IDs...")
                 ids = load_playlist_ids_radio(name, PLAYLISTS[name])
-                s["IDS"] = ids
-            if not ids:
-                logging.warning(f"[{name}] No playlist ids found; sleeping...")
-                time.sleep(10)
-                continue
+                if ids:
+                    s["IDS"] = ids
+                    last_refresh = time.time()
+                else:
+                    logging.warning(f"[{name}] ⚠️ No playlist IDs found; retrying...")
+                    time.sleep(30)
+                    continue
 
+            ids = s["IDS"]
             vid = ids[s["INDEX"] % len(ids)]
-            s["INDEX"] += 1
+            s["INDEX"] = (s["INDEX"] + 1) % len(ids)
             url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶️ {url}")
+            logging.info(f"[{name}] ▶️ Playing sequentially: {url}")
 
+            # =========================================================
+            # 🎵 Single ffmpeg process (no concurrency)
+            # =========================================================
             cmd = (
                 f'yt-dlp -f "bestaudio/best" --cookies "{COOKIES_PATH}" '
                 f'--user-agent "Mozilla/5.0" '
                 f'-o - --quiet --no-warnings "{url}" | '
-                f'ffmpeg -loglevel quiet -i pipe:0 -ac 1 -ar 44100 -b:a 40k -f mp3 pipe:1'
+                f'ffmpeg -loglevel quiet -i pipe:0 -ac 1 -ar 44100 '
+                f'-b:a 40k -f mp3 pipe:1'
             )
 
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            # Start one subprocess and block until it ends
+            with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
+                for chunk in iter(lambda: proc.stdout.read(4096), b''):
+                    # Ensure sequential push to queue
+                    while len(s["QUEUE"]) >= MAX_QUEUE:
+                        time.sleep(0.05)
+                    s["QUEUE"].append(chunk)
 
-            while True:
-                chunk = proc.stdout.read(4096)
-                if not chunk:
-                    break
-                while len(s["QUEUE"]) >= MAX_QUEUE:
-                    time.sleep(0.05)
-                s["QUEUE"].append(chunk)
+                proc.wait()
 
-            proc.wait()
-            logging.info(f"[{name}] ✅ Track completed.")
+            logging.info(f"[{name}] ✅ Finished track. Moving to next...")
             time.sleep(2)
 
         except Exception as e:
-            logging.error(f"[{name}] Worker error: {e}")
+            logging.error(f"[{name}] ❌ Sequential worker error: {e}")
             time.sleep(5)
 
 # ==============================================================
