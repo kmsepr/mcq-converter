@@ -177,7 +177,7 @@ PLAYLISTS = {
 
 "firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
 
-"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv&si=hEOiuX25h00IQkNp",
+"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
   
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
@@ -188,8 +188,8 @@ PLAY_MODES = {
     "ca": "reverse",
     
     "eftguru": "shuffle",
-    "samastha": "shuffle"
- "firdous": "shuffle"
+    "samastha": "shuffle",
+ "firdous": "shuffle",
     
     
 }
