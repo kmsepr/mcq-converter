@@ -175,9 +175,8 @@ PLAYLISTS = {
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
 
 
-"firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
 
-"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
+
   
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
@@ -193,10 +192,8 @@ PLAY_MODES = {
 
 "youtube": "normal",
     
-   "firdous": "normal",
-    
    
-"samastha": "normal",
+    
 "eftguru": "normal",
     
     
