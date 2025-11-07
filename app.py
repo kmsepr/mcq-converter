@@ -183,7 +183,7 @@ PLAYLISTS = {
 
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
-"kashmir": "https://youtube.com/playlist?list=PLn3BMOY0H7UtVBWbP963mAYdmbRD8YbCi&si=H2XpDbLRyoz98vL6",
+"kashmir": "https://youtube.com/playlist?list=PLn3BMOY0H7UtVBWbP963mAYdmbRD8YbCi",
 
 }
 
@@ -191,12 +191,9 @@ PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
     
-    "eftguru": "reverse",
-    "samastha": "reverse",
-    "youtube": "reverse",
-
- "firdous": "reverse",
-"kashmir": "normal",
+   
+    
+   
     
     
 }
