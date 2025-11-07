@@ -145,39 +145,80 @@ def load_playlist_ids_radio(name, url):
 
 def stream_worker_radio(name):
     s = STREAMS_RADIO[name]
+
+    # =========================================================
+    # ⚙️ Tunable lightweight parameters
+    # =========================================================
+    MAX_QUEUE = 5                  # keep very small buffer
+    FFMPEG_BITRATE = "40k"         # reduce CPU & RAM load
+    REFRESH_INTERVAL = 7200        # refresh playlist every 2h
+    RETRY_SLEEP = 8                # wait time after any failure
+    TRACK_GAP = 2                  # short gap between tracks
+
     last_refresh = 0
+    start_time = time.time()
+
     while True:
         try:
-            if not s["IDS"] or (time.time() - last_refresh) > REFRESH_INTERVAL:
-                s["IDS"] = load_playlist_ids_radio(name, PLAYLISTS[name])
-                last_refresh = time.time()
-                if not s["IDS"]: time.sleep(60); continue
+            # =========================================================
+            # 🔁 Refresh playlist if empty or too old
+            # =========================================================
+            if not s.get("IDS") or (time.time() - last_refresh) > REFRESH_INTERVAL:
+                logging.info(f"[{name}] 🔄 Refreshing playlist IDs...")
+                ids = load_playlist_ids_radio(name, PLAYLISTS[name])
+                if ids:
+                    s["IDS"] = ids
+                    last_refresh = time.time()
+                    logging.info(f"[{name}] ✅ Loaded {len(ids)} videos.")
+                else:
+                    logging.warning(f"[{name}] ⚠️ No playlist IDs found, retrying...")
+                    time.sleep(RETRY_SLEEP)
+                    continue
 
-            vid = s["IDS"][s["INDEX"] % len(s["IDS"])]
-            s["INDEX"] = (s["INDEX"] + 1) % len(s["IDS"])
+            ids = s["IDS"]
+            vid = ids[s["INDEX"] % len(ids)]
+            s["INDEX"] = (s["INDEX"] + 1) % len(ids)
             url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶ {url}")
+            logging.info(f"[{name}] ▶️ Streaming: {url}")
 
+            # =========================================================
+            # 🎧 yt-dlp + ffmpeg lightweight pipeline
+            # =========================================================
             cmd = (
-                f'nice -n 10 yt-dlp -f "bestaudio/best" --cookies "{COOKIES_PATH}" '
-                f'--user-agent "Mozilla/5.0" -o - --quiet --no-warnings "{url}" | '
-                f'nice -n 10 ffmpeg -loglevel error -threads 1 -i pipe:0 '
-                f'-ac 1 -ar 22050 -b:a 32k -f mp3 pipe:1'
+                f'yt-dlp -f "bestaudio/best" --no-playlist --quiet --no-warnings '
+                f'--limit-rate 200K --user-agent "Mozilla/5.0" '
+                f'-o - "{url}" | '
+                f'ffmpeg -loglevel quiet -i pipe:0 -ac 1 -ar 44100 '
+                f'-b:a {FFMPEG_BITRATE} -f mp3 pipe:1'
             )
 
+            # =========================================================
+            # 🧩 Sequential single-process stream
+            # =========================================================
             with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
-                for chunk in iter(lambda: proc.stdout.read(2048), b''):
-                    if len(s["QUEUE"]) < MAX_QUEUE:
-                        s["QUEUE"].append(chunk)
-                    else:
-                        time.sleep(0.2)  # slower check to save CPU
+                for chunk in iter(lambda: proc.stdout.read(4096), b''):
+                    if not chunk:
+                        break
+                    # keep queue minimal for RAM efficiency
+                    while len(s["QUEUE"]) >= MAX_QUEUE:
+                        time.sleep(0.1)
+                    s["QUEUE"].append(chunk)
+
                 proc.wait()
 
-            time.sleep(1)
+            logging.info(f"[{name}] ✅ Finished track, next in {TRACK_GAP}s...")
+            time.sleep(TRACK_GAP)
+
+            # =========================================================
+            # ♻️ Restart every 6 hours to prevent leaks
+            # =========================================================
+            if (time.time() - start_time) > 21600:
+                logging.info(f"[{name}] ♻️ Restarting worker to free memory...")
+                break
 
         except Exception as e:
-            logging.warning(f"[{name}] worker err: {e}")
-            time.sleep(5)
+            logging.error(f"[{name}] ❌ Worker error: {e}")
+            time.sleep(RETRY_SLEEP)
 
 # ==============================================================
 # 🌐 Flask Routes
