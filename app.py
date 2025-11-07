@@ -184,7 +184,7 @@ PLAYLISTS = {
 }
 
 PLAY_MODES = {
-    "kas_ranker": "shuffle",
+    "kas_ranker": "reverse",
     "ca": "shuffle",
     
     "eftguru": "shuffle",
