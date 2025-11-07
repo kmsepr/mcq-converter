@@ -181,15 +181,19 @@ PLAYLISTS = {
   
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
+"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
+
 }
 
 PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
     
-    "eftguru": "shuffle",
-    "samastha": "shuffle",
- "firdous": "shuffle",
+    "eftguru": "reverse",
+    "samastha": "reverse",
+    "youtube": "reverse",
+
+ "firdous": "reverse",
     
     
 }
