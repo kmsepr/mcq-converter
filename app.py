@@ -196,6 +196,7 @@ PLAY_MODES = {
     "youtube": "reverse",
 
  "firdous": "reverse",
+"kashmir": "normal",
     
     
 }
