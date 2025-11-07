@@ -177,9 +177,9 @@ PLAYLISTS = {
 "dd": "https://youtube.com/playlist?list=PLjETElbIubzt1eVq5OVCmyiV6ai7aUP-z",
 
 "firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
+
+"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv&si=hEOiuX25h00IQkNp",
   
-
-
 
 
 }
