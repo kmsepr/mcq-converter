@@ -179,16 +179,16 @@ PLAYLISTS = {
 
 "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv&si=hEOiuX25h00IQkNp",
   
-
+"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
 }
 
 PLAY_MODES = {
     "kas_ranker": "reverse",
-    "ca": "shuffle",
+    "ca": "reverse",
     
     "eftguru": "shuffle",
-    "dd": "shuffle",
+    "samastha": "shuffle"
  "firdous": "shuffle"
     
     
