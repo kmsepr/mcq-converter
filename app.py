@@ -193,7 +193,7 @@ PLAY_MODES = {
 "kashmir": "normal",
 "youtube": "normal",
     
-   "firdous": "normal,
+   "firdous": "normal",
     
    
 "samastha": "normal",
