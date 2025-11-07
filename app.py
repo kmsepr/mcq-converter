@@ -175,6 +175,8 @@ PLAYLISTS = {
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
 
 "dd": "https://youtube.com/playlist?list=PLjETElbIubzt1eVq5OVCmyiV6ai7aUP-z",
+
+"firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
   
 
 
@@ -188,6 +190,7 @@ PLAY_MODES = {
     
     "eftguru": "shuffle",
     "dd": "shuffle",
+ "firdous": "shuffle"
     
     
 }
