@@ -1,158 +1,85 @@
-import os
-import io
-import re
-import time
-import random
-import json
-import threading
-import subprocess
-import logging
-import pandas as pd
+import os, io, re, time, random, json, threading, subprocess, logging
 from collections import deque
 from logging.handlers import RotatingFileHandler
 from flask import Flask, request, send_file, Response, render_template_string, abort, stream_with_context
+import pandas as pd
 
 # ==============================================================
 # 🧠 Basic Config
 # ==============================================================
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # ==============================================================
-# 📘 MCQ Converter SECTION
+# 📘 MCQ Converter (unchanged except slight pandas optimization)
 # ==============================================================
 
 def parse_mcqs(text):
-    text = text.replace('\r\n', '\n').replace('\r','\n')
+    text = text.replace('\r', '\n')
     lines = [l.strip() for l in text.split('\n') if l.strip()]
-
-    rows = []
-    qno = None
-    qtext_lines = []
-    opts = {}
-    answer = None
-    explanation_lines = []
+    rows, qno, qtext_lines, opts, answer, explanation_lines = [], None, [], {}, None, []
     capturing_expl = False
 
     for line in lines:
-        # ✅ Match option lines
         m_opt = re.match(r'^[\(\[]?([a-dA-D])[\)\:\-]*\s*(.*)', line)
         if m_opt and not capturing_expl:
-            opt_text = m_opt.group(2).strip()
-            opt_text = re.sub(r'^[\.\)\:\-\s]+', '', opt_text)
-            opts[m_opt.group(1).lower()] = opt_text
+            opts[m_opt.group(1).lower()] = re.sub(r'^[\.\)\:\-\s]+', '', m_opt.group(2).strip())
             continue
-
-        # ✅ Match answer lines
         m_ans = re.match(r'^(\d+)\.\s*(?:Answer|Ans)?[:\-]?\s*([A-Da-d])$', line)
         if m_ans:
-            answer = m_ans.group(2).upper()
-            qno = m_ans.group(1)
-            capturing_expl = True
-            explanation_lines = []
+            answer, qno, capturing_expl, explanation_lines = m_ans.group(2).upper(), m_ans.group(1), True, []
             continue
-
-        # ✅ Explanation mode
         if capturing_expl:
             if re.match(r'^\d+\.', line):
                 if opts and answer:
                     question_full = '\n'.join(qtext_lines).strip() + '\n' + \
                         f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-                    rows.append([
-                        qno,
-                        question_full,
-                        'A','B','C','D',
-                        {"A":1,"B":2,"C":3,"D":4}[answer],
-                        ' '.join(explanation_lines).strip(),
-                        ""
-                    ])
-                qno = None
-                qtext_lines = []
-                opts = {}
-                answer = None
-                capturing_expl = False
+                    rows.append([qno, question_full, 'A','B','C','D',
+                                 {"A":1,"B":2,"C":3,"D":4}[answer],
+                                 ' '.join(explanation_lines).strip(), ""])
+                qno, qtext_lines, opts, answer, capturing_expl = None, [], {}, None, False
                 m_q = re.match(r'^(\d+)\.(.*)', line)
                 if m_q:
-                    qno = m_q.group(1)
-                    qtext_lines = [m_q.group(2).strip()]
+                    qno, qtext_lines = m_q.group(1), [m_q.group(2).strip()]
                 continue
             else:
-                explanation_lines.append(line)
-                continue
-
-        # ✅ Question start
+                explanation_lines.append(line); continue
         m_q = re.match(r'^(\d+)\.(.*)', line)
-        if m_q:
-            qno = m_q.group(1)
-            qtext_lines = [m_q.group(2).strip()]
-            continue
+        if m_q: qno, qtext_lines = m_q.group(1), [m_q.group(2).strip()]; continue
+        if qno: qtext_lines.append(line)
 
-        if qno:
-            qtext_lines.append(line)
-
-    # ✅ Final flush
     if opts and answer:
         question_full = '\n'.join(qtext_lines).strip() + '\n' + \
             f"A) {opts.get('a','')}\nB) {opts.get('b','')}\nC) {opts.get('c','')}\nD) {opts.get('d','')}"
-        rows.append([
-            qno,
-            question_full,
-            'A','B','C','D',
-            {"A":1,"B":2,"C":3,"D":4}[answer],
-            ' '.join(explanation_lines).strip(),
-            ""
-        ])
-
+        rows.append([qno, question_full, 'A','B','C','D',
+                     {"A":1,"B":2,"C":3,"D":4}[answer],
+                     ' '.join(explanation_lines).strip(), ""])
     return rows
 
 
-@app.route("/mcq", methods=["GET"])
+@app.route("/mcq")
 def index_mcq():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <title>MCQ Converter</title>
-    <style>
-    body {display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial;background:linear-gradient(135deg,#4facfe,#00f2fe);margin:0;}
-    .container{text-align:center;background:white;padding:40px;border-radius:15px;box-shadow:0 10px 25px rgba(0,0,0,0.25);width:80%;max-width:900px;}
-    h1{font-size:36px;margin-bottom:20px;color:#222;}
-    textarea{width:100%;height:400px;padding:15px;font-size:16px;border-radius:10px;border:1px solid #ccc;resize:vertical;margin-bottom:20px;}
-    input[type=submit]{margin-top:20px;background:#007bff;color:white;border:none;padding:15px 30px;font-size:18px;border-radius:10px;cursor:pointer;transition:0.3s;}
-    input[type=submit]:hover{background:#0056b3;}
-    </style>
-    </head>
-    <body>
-    <div class="container">
-        <h1>📘 MCQ to Excel Converter</h1>
-        <form method="post" action="/convert">
-            <textarea name="mcq_text" placeholder="Paste your MCQs here..."></textarea><br>
-            <input type="submit" value="Convert to Excel">
-        </form>
-    </div>
-    </body>
-    </html>
-    """
+    return """<html><head><meta name=viewport content='width=device-width,initial-scale=1'>
+<title>MCQ Converter</title>
+<style>body{font-family:sans-serif;text-align:center;margin:0;background:#eef}
+textarea{width:95%;height:350px;margin:10px;border-radius:8px}
+button{padding:10px 20px;margin:10px;border:0;border-radius:8px;background:#28a;color:#fff;font-size:16px}
+</style></head><body><h2>📘 MCQ → Excel</h2>
+<form method=post action=/convert><textarea name=mcq_text></textarea><br><button>Convert</button></form></body></html>"""
 
 
-@app.route('/convert', methods=['POST'])
+@app.route("/convert", methods=["POST"])
 def convert():
     text = request.form.get("mcq_text", "").strip()
-    if not text:
-        return "No text provided!", 400
-
+    if not text: return "No text!", 400
     rows = parse_mcqs(text)
-    if not rows:
-        return "Could not parse any MCQs. Please check format.", 400
-
+    if not rows: return "Parse error!", 400
     df = pd.DataFrame(rows, columns=[
         "Sr. No.","Question Text","Option 1","Option 2","Option 3","Option 4",
         "Correct Option Number (1–4)","Explanation","Image URL"
     ])
-    output = io.BytesIO()
-    df.to_excel(output, index=False, header=True)
-    output.seek(0)
+    output = io.BytesIO(); df.to_excel(output, index=False); output.seek(0)
     return send_file(output, as_attachment=True, download_name="mcqs.xlsx")
 
 # ==============================================================
@@ -162,173 +89,94 @@ def convert():
 LOG_PATH = "/mnt/data/radio.log"
 COOKIES_PATH = "/mnt/data/cookies.txt"
 CACHE_FILE = "/mnt/data/playlist_cache.json"
-os.makedirs(DOWNLOAD_DIR := "/mnt/data/radio_cache", exist_ok=True)
-os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-
-handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
+os.makedirs("/mnt/data/radio_cache", exist_ok=True)
+handler = RotatingFileHandler(LOG_PATH, maxBytes=1_000_000, backupCount=1)
 logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
     "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
-    
-    
     "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
-
-
-"firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
-
-"samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
-  
-"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-
-"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
-
-"kashmir": "https://youtube.com/playlist?list=PLn3BMOY0H7UtVBWbP963mAYdmbRD8YbCi",
-
+    "firdous": "https://youtube.com/playlist?list=PLgkREi1Wpr-VMfNuvrgNhZqpjEbT7nxv0",
+    "samastha": "https://youtube.com/playlist?list=PLgkREi1Wpr-XgNxocxs3iPj61pqMhi9bv",
 }
 
-PLAY_MODES = {
-    "kas_ranker": "reverse",
-    "ca": "reverse",
-"kashmir": "normal",
-"youtube": "normal",
-    
-   "firdous": "normal",
-    
-   
-"samastha": "normal",
-"eftguru": "normal",
-    
-    
-}
+PLAY_MODES = {"kas_ranker": "reverse", "eftguru": "normal", "firdous": "normal", "samastha": "normal"}
 
 STREAMS_RADIO = {}
-MAX_QUEUE = 128
-REFRESH_INTERVAL = 10800  # 3 hr
+MAX_QUEUE = 96  # smaller buffer → less RAM
+REFRESH_INTERVAL = 14400  # 4 hr
 
 # ==============================================================
-# 🧩 Playlist Caching + Loader
+# 🧩 Playlist Caching
 # ==============================================================
 
 def load_cache_radio():
-    if os.path.exists(CACHE_FILE):
-        try:
-            return json.load(open(CACHE_FILE))
-        except Exception:
-            return {}
-    return {}
+    try: return json.load(open(CACHE_FILE))
+    except: return {}
 
 def save_cache_radio(data):
-    try:
-        json.dump(data, open(CACHE_FILE, "w"))
-    except Exception as e:
-        logging.error(e)
+    try: json.dump(data, open(CACHE_FILE, "w"))
+    except: pass
 
 CACHE_RADIO = load_cache_radio()
 
-
 def get_playlist_ids(url):
-    """Return list of YouTube video IDs from a playlist URL using yt-dlp."""
     try:
-        cmd = [
-            "yt-dlp",
-            "--flat-playlist",
-            "--dump-single-json",
-            "--no-warnings",
-            "--quiet",
-            url
-        ]
+        cmd = ["yt-dlp", "--flat-playlist", "--dump-single-json", "--no-warnings", "--quiet", url]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
-        return [entry["id"] for entry in data.get("entries", []) if "id" in entry]
+        return [e["id"] for e in data.get("entries", []) if "id" in e]
     except Exception as e:
-        logging.error(f"get_playlist_ids() failed for {url}: {e}")
+        logging.warning(f"Playlist read fail: {e}")
         return []
 
-
 def load_playlist_ids_radio(name, url):
-    """Load and cache YouTube playlist IDs with safe mode handling."""
-    try:
-        ids = get_playlist_ids(url)
-        if not ids:
-            logging.warning(f"[{name}] ⚠️ No videos found in playlist — using empty list.")
-            CACHE_RADIO[name] = []
-            save_cache_radio(CACHE_RADIO)
-            return []
-
-        mode = PLAY_MODES.get(name, "normal").lower().strip()
-        if mode == "shuffle":
-            random.shuffle(ids)
-        elif mode == "reverse":
-            ids.reverse()
-
-        CACHE_RADIO[name] = ids
-        save_cache_radio(CACHE_RADIO)
-        logging.info(f"[{name}] Cached {len(ids)} videos in {mode.upper()} mode.")
-        return ids
-
-    except Exception as e:
-        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to normal order.")
-        return CACHE_RADIO.get(name, [])
-
+    ids = get_playlist_ids(url)
+    if not ids: return CACHE_RADIO.get(name, [])
+    mode = PLAY_MODES.get(name, "normal")
+    if mode == "reverse": ids.reverse()
+    elif mode == "shuffle": random.shuffle(ids)
+    CACHE_RADIO[name] = ids; save_cache_radio(CACHE_RADIO)
+    return ids
 
 # ==============================================================
-# 🎧 Streaming Worker
+# 🎧 Low-CPU Sequential Worker
 # ==============================================================
 
 def stream_worker_radio(name):
     s = STREAMS_RADIO[name]
-    refresh_interval = 3600  # refresh playlist every 1 hour
     last_refresh = 0
-
     while True:
         try:
-            # =========================================================
-            # 🔄 Refresh playlist IDs periodically or if empty
-            # =========================================================
-            if not s.get("IDS") or (time.time() - last_refresh) > refresh_interval:
-                logging.info(f"[{name}] 🔁 Refreshing playlist IDs...")
-                ids = load_playlist_ids_radio(name, PLAYLISTS[name])
-                if ids:
-                    s["IDS"] = ids
-                    last_refresh = time.time()
-                else:
-                    logging.warning(f"[{name}] ⚠️ No playlist IDs found; retrying...")
-                    time.sleep(30)
-                    continue
+            if not s["IDS"] or (time.time() - last_refresh) > REFRESH_INTERVAL:
+                s["IDS"] = load_playlist_ids_radio(name, PLAYLISTS[name])
+                last_refresh = time.time()
+                if not s["IDS"]: time.sleep(60); continue
 
-            ids = s["IDS"]
-            vid = ids[s["INDEX"] % len(ids)]
-            s["INDEX"] = (s["INDEX"] + 1) % len(ids)
+            vid = s["IDS"][s["INDEX"] % len(s["IDS"])]
+            s["INDEX"] = (s["INDEX"] + 1) % len(s["IDS"])
             url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶️ Playing sequentially: {url}")
+            logging.info(f"[{name}] ▶ {url}")
 
-            # =========================================================
-            # 🎵 Single ffmpeg process (no concurrency)
-            # =========================================================
             cmd = (
-                f'yt-dlp -f "bestaudio/best" --cookies "{COOKIES_PATH}" '
-                f'--user-agent "Mozilla/5.0" '
-                f'-o - --quiet --no-warnings "{url}" | '
-                f'ffmpeg -loglevel quiet -i pipe:0 -ac 1 -ar 44100 '
-                f'-b:a 40k -f mp3 pipe:1'
+                f'nice -n 10 yt-dlp -f "bestaudio/best" --cookies "{COOKIES_PATH}" '
+                f'--user-agent "Mozilla/5.0" -o - --quiet --no-warnings "{url}" | '
+                f'nice -n 10 ffmpeg -loglevel error -threads 1 -i pipe:0 '
+                f'-ac 1 -ar 22050 -b:a 32k -f mp3 pipe:1'
             )
 
-            # Start one subprocess and block until it ends
             with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
-                for chunk in iter(lambda: proc.stdout.read(4096), b''):
-                    # Ensure sequential push to queue
-                    while len(s["QUEUE"]) >= MAX_QUEUE:
-                        time.sleep(0.05)
-                    s["QUEUE"].append(chunk)
-
+                for chunk in iter(lambda: proc.stdout.read(2048), b''):
+                    if len(s["QUEUE"]) < MAX_QUEUE:
+                        s["QUEUE"].append(chunk)
+                    else:
+                        time.sleep(0.2)  # slower check to save CPU
                 proc.wait()
 
-            logging.info(f"[{name}] ✅ Finished track. Moving to next...")
-            time.sleep(2)
+            time.sleep(1)
 
         except Exception as e:
-            logging.error(f"[{name}] ❌ Sequential worker error: {e}")
+            logging.warning(f"[{name}] worker err: {e}")
             time.sleep(5)
 
 # ==============================================================
@@ -337,79 +185,31 @@ def stream_worker_radio(name):
 
 @app.route("/")
 def home():
-    playlists = list(PLAYLISTS.keys())
-    html = """<!doctype html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🎧 YouTube Radio</title>
-<style>
-body{background:#000;color:#0f0;font-family:Arial,Helvetica,sans-serif;text-align:center;margin:0;padding:12px}
-a{display:block;color:#0f0;text-decoration:none;border:1px solid #0f0;padding:10px;margin:8px;border-radius:8px;font-size:18px}
-a:hover{background:#0f0;color:#000}
-</style></head><body>
-<h2>🎶 YouTube Playlist Radio</h2>
-<a href="/mcq">🧠 Go to MCQ Converter</a>
-{% for p in playlists %}
-  <a href="/stream/{{p}}">▶ {{p|capitalize}}</a>
-{% endfor %}
+    html = """<html><head><meta name=viewport content='width=device-width,initial-scale=1'>
+<style>body{background:#000;color:#0f0;font-family:monospace;text-align:center}
+a{display:block;color:#0f0;border:1px solid #0f0;margin:6px;padding:10px;border-radius:8px;text-decoration:none}
+a:hover{background:#0f0;color:#000}</style></head><body><h3>🎧 YouTube Radio</h3>
+<a href='/mcq'>🧠 MCQ Converter</a>
+{% for p in playlists %}<a href='/stream/{{p}}'>▶ {{p}}</a>{% endfor %}
 </body></html>"""
-    return render_template_string(html, playlists=playlists)
-
-
-@app.route("/listen/<name>")
-def listen_radio_download(name):
-    if name not in STREAMS_RADIO:
-        abort(404)
-    s = STREAMS_RADIO[name]
-    def gen():
-        while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
-    headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
-
+    return render_template_string(html, playlists=PLAYLISTS.keys())
 
 @app.route("/stream/<name>")
 def stream_audio(name):
-    if name not in STREAMS_RADIO:
-        abort(404)
-    s = STREAMS_RADIO[name]
+    s = STREAMS_RADIO.get(name)
+    if not s: abort(404)
     def gen():
         while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
+            if s["QUEUE"]: yield s["QUEUE"].popleft()
+            else: time.sleep(0.1)
     return Response(stream_with_context(gen()), mimetype="audio/mpeg")
 
-def cache_refresher():
-    while True:
-        for name, url in PLAYLISTS.items():
-            last = STREAMS_RADIO[name]["LAST_REFRESH"]
-            if time.time() - last > REFRESH_INTERVAL:
-                logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
-                STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
-                STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
-        time.sleep(1800)
-
-
 # ==============================================================
-# 🚀 START SERVER
+# 🚀 Start
 # ==============================================================
 
 if __name__ == "__main__":
     for pname, url in PLAYLISTS.items():
-        STREAMS_RADIO[pname] = {
-            "IDS": load_playlist_ids_radio(pname, url),
-            "INDEX": 0,
-            "QUEUE": deque(),
-            "LAST_REFRESH": time.time(),
-        }
+        STREAMS_RADIO[pname] = {"IDS": load_playlist_ids_radio(pname, url), "INDEX": 0, "QUEUE": deque()}
         threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True).start()
-
-    # ✅ Start cache refresher thread properly
-    threading.Thread(target=cache_refresher, daemon=True).start()
-
-    logging.info("🚀 Unified Flask App (Radio + MCQ Converter) running at http://0.0.0.0:8000")
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000, threaded=False)
