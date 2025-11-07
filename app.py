@@ -190,10 +190,14 @@ PLAYLISTS = {
 PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
+"kashmir": "normal",
+"youtube": "normal",
+    
+   "firdous": "normal,
     
    
-    
-   
+"samastha": "normal",
+"eftguru": "normal",
     
     
 }
