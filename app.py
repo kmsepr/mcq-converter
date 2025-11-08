@@ -170,12 +170,7 @@ logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
     "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
-    
-    
-    "eftguru": "https://youtube.com/playlist?list=PLYKzjRvMAycgYvPysx_tiv0q-ZHnDJx0y",
-
-
-
+   
 
   
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
@@ -190,11 +185,9 @@ PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
 
-"youtube": "normal",
+    "youtube": "normal",
     
    
-    
-"eftguru": "normal",
     
     
 }
