@@ -194,7 +194,7 @@ PLAY_MODES = {
 
 STREAMS_RADIO = {}
 MAX_QUEUE = 128
-REFRESH_INTERVAL = 10800  # 3 hr
+REFRESH_INTERVAL = 600 # 10 min
 
 # ==============================================================
 # 🧩 Playlist Caching + Loader
