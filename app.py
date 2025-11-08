@@ -185,7 +185,7 @@ PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
 
-    "youtube": "normal",
+    "youtube": "reverse",
     
    
     
