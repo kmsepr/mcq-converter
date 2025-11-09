@@ -169,8 +169,7 @@ handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
 logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
-    "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
-   
+    
 
   
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
@@ -183,7 +182,7 @@ PLAYLISTS = {
 }
 
 PLAY_MODES = {
-    "kas_ranker": "reverse",
+    
     "ca": "reverse",
 
     "youtube": "reverse",
