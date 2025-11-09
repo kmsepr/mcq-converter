@@ -177,7 +177,7 @@ PLAYLISTS = {
 
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
-
+"mediaone": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
 
 
 
@@ -188,6 +188,7 @@ PLAY_MODES = {
     "ca": "reverse",
 
     "youtube": "reverse",
+    "mediaone": "normal",
     
    
     
@@ -195,7 +196,7 @@ PLAY_MODES = {
 }
 
 STREAMS_RADIO = {}
-MAX_QUEUE = 128
+MAX_QUEUE = 64
 REFRESH_INTERVAL = 600 # 10 min
 
 # ==============================================================
@@ -264,8 +265,8 @@ def load_playlist_ids_radio(name, url):
         return CACHE_RADIO.get(name, [])
 
 
-# ==============================================================
-# 🎧 Streaming Worker
+
+# ⚡ Ultra-Lightweight Radio Worker (Low CPU/RAM)
 # ==============================================================
 
 def stream_worker_radio(name):
@@ -277,39 +278,42 @@ def stream_worker_radio(name):
                 ids = load_playlist_ids_radio(name, PLAYLISTS[name])
                 s["IDS"] = ids
             if not ids:
-                logging.warning(f"[{name}] No playlist ids found; sleeping...")
-                time.sleep(10)
+                logging.warning(f"[{name}] No playlist ids found; sleeping 60s...")
+                time.sleep(60)
                 continue
 
             vid = ids[s["INDEX"] % len(ids)]
             s["INDEX"] += 1
             url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶️ {url}")
+            logging.info(f"[{name}] ▶️ Now playing: {url}")
 
-            cmd = (
-                f'yt-dlp -f "bestaudio/best" --cookies "{COOKIES_PATH}" '
-                f'--user-agent "Mozilla/5.0" '
-                f'-o - --quiet --no-warnings "{url}" | '
-                f'ffmpeg -loglevel quiet -i pipe:0 -ac 1 -ar 44100 -b:a 40k -f mp3 pipe:1'
-            )
+            cmd = [
+                "yt-dlp", "-f", "bestaudio/best",
+                "--cookies", COOKIES_PATH,
+                "--user-agent", "Mozilla/5.0",
+                "-o", "-", "--quiet", "--no-warnings", url
+            ]
+            ytdlp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ffmpeg = subprocess.Popen([
+                "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
+                "-ac", "1", "-ar", "22050", "-b:a", "32k", "-f", "mp3", "pipe:1"
+            ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-            proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ytdlp.stdout.close()  # Allow yt-dlp to exit when ffmpeg closes
 
-            while True:
-                chunk = proc.stdout.read(4096)
-                if not chunk:
-                    break
+            # Stream directly — no big buffer
+            for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
                 while len(s["QUEUE"]) >= MAX_QUEUE:
-                    time.sleep(0.05)
+                    time.sleep(0.2)
                 s["QUEUE"].append(chunk)
 
-            proc.wait()
-            logging.info(f"[{name}] ✅ Track completed.")
-            time.sleep(2)
+            ffmpeg.wait(timeout=2)
+            logging.info(f"[{name}] ✅ Finished track.")
+            time.sleep(3)
 
         except Exception as e:
-            logging.error(f"[{name}] Worker error: {e}")
-            time.sleep(5)
+            logging.warning(f"[{name}] Worker error: {e}")
+            time.sleep(10)
 
 # ==============================================================
 # 🌐 Flask Routes
@@ -367,11 +371,11 @@ def cache_refresher():
     while True:
         for name, url in PLAYLISTS.items():
             last = STREAMS_RADIO[name]["LAST_REFRESH"]
-            if time.time() - last > REFRESH_INTERVAL:
+            if time.time() - last > 7200:  # every 2 hours
                 logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
                 STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
                 STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
-        time.sleep(1800)
+        time.sleep(600)
 
 
 # ==============================================================
