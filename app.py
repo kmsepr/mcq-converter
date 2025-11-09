@@ -177,7 +177,7 @@ PLAYLISTS = {
 
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
-"out_of_focus": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
+"media_one": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
 
 
 
