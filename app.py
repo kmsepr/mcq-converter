@@ -252,6 +252,9 @@ def load_playlist_ids_radio(name, url):
 
 def stream_worker_radio(name):
     s = STREAMS_RADIO[name]
+    IDLE_TIMEOUT = 600  # 10 minutes
+    idle_start = None
+
     while True:
         try:
             ids = s["IDS"]
@@ -289,18 +292,23 @@ def stream_worker_radio(name):
 
             ytdlp.stdout.close()
 
-            # 🚦 Read and push data only while someone is listening
             while True:
-                # If no active listener — stop streaming
-                if s.get("ACTIVE_LISTENERS", 0) == 0:
-                    logging.info(f"[{name}] 🛑 No listeners — stopping stream.")
-                    ffmpeg.kill()
-                    ytdlp.kill()
-                    break
-
                 chunk = ffmpeg.stdout.read(2048)
                 if not chunk:
                     break
+
+                # 💤 Check listener activity
+                active = s.get("ACTIVE_LISTENERS", 0)
+                if active == 0:
+                    if idle_start is None:
+                        idle_start = time.time()
+                    elif time.time() - idle_start > IDLE_TIMEOUT:
+                        logging.info(f"[{name}] 💤 No listeners for 10 min — stopping stream.")
+                        ffmpeg.kill()
+                        ytdlp.kill()
+                        break
+                else:
+                    idle_start = None  # reset timer when someone listens
 
                 while len(s["QUEUE"]) >= MAX_QUEUE:
                     time.sleep(0.2)
