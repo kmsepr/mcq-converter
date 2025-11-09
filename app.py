@@ -196,7 +196,7 @@ PLAY_MODES = {
 }
 
 STREAMS_RADIO = {}
-MAX_QUEUE = 128
+MAX_QUEUE = 64
 REFRESH_INTERVAL = 600 # 10 min
 
 # ==============================================================
