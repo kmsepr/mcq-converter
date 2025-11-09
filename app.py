@@ -178,14 +178,18 @@ PLAYLISTS = {
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
 
+"jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
+
 }
 
 PLAY_MODES = {
-    "kas_ranker": "reverse",
+    "kas_ranker": "normal",
     
     "youtube": "reverse",
     
    "ca": "reverse",
+
+"jr": "normal",
     
     
     
