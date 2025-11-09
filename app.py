@@ -180,7 +180,7 @@ PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
     "youtube": "reverse",
-    "mediaone": "reverse",
+    "mediaone": "normal",
 }
 
 STREAMS_RADIO = {}
