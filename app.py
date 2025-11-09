@@ -340,32 +340,51 @@ a:hover{background:#0f0;color:#000}
 
 
 @app.route("/listen/<name>")
-def listen_radio_download(name):
-    if name not in STREAMS_RADIO:
+def listen_radio(name):
+    if name not in PLAYLISTS:
         abort(404)
-    s = STREAMS_RADIO[name]
-    def gen():
+
+    # Reuse the same generator from /stream
+    ids = CACHE_RADIO.get(name)
+    if not ids:
+        ids = load_playlist_ids_radio(name, PLAYLISTS[name])
+    if not ids:
+        return "No videos found.", 404
+
+    s = STREAMS_RADIO.setdefault(name, {"INDEX": 0})
+    s["INDEX"] %= len(ids)
+
+    def next_video():
+        vid = ids[s["INDEX"] % len(ids)]
+        s["INDEX"] += 1
+        return f"https://www.youtube.com/watch?v={vid}"
+
+    def stream_next():
         while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
+            url = next_video()
+            logging.info(f"[{name}] ▶️ (download) {url}")
+            try:
+                ytdlp = subprocess.Popen([
+                    "yt-dlp", "-f", "bestaudio/best",
+                    "-o", "-", "--quiet", "--no-warnings", url
+                ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                ffmpeg = subprocess.Popen([
+                    "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
+                    "-ac", "1", "-ar", "22050", "-b:a", "40k", "-f", "mp3", "pipe:1"
+                ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                ytdlp.stdout.close()
+
+                for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
+                    yield chunk
+
+                ffmpeg.wait(timeout=2)
+                time.sleep(2)
+            except Exception as e:
+                logging.warning(f"[{name}] ⚠️ Listen stream error: {e}")
+                time.sleep(3)
+
     headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
-
-
-@app.route("/stream/<name>")
-def stream_audio(name):
-    if name not in STREAMS_RADIO:
-        abort(404)
-    s = STREAMS_RADIO[name]
-    def gen():
-        while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg")
+    return Response(stream_with_context(stream_next()), mimetype="audio/mpeg", headers=headers)
 
 def cache_refresher():
     while True:
