@@ -173,7 +173,7 @@ PLAYLISTS = {
 
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
-
+"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
 
 }
@@ -183,7 +183,8 @@ PLAY_MODES = {
     
     "youtube": "reverse",
     
-   
+   "ca": "shuffle",
+    
     
     
 }
