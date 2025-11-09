@@ -177,7 +177,6 @@ PLAYLISTS = {
 
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
-"mediaone": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
 
 
 
@@ -188,7 +187,6 @@ PLAY_MODES = {
     "ca": "reverse",
 
     "youtube": "reverse",
-    "mediaone": "normal",
     
    
     
