@@ -171,9 +171,6 @@ logging.getLogger().addHandler(handler)
 PLAYLISTS = {
     
 
-  
-"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-
 "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
 
 
@@ -183,8 +180,7 @@ PLAYLISTS = {
 
 PLAY_MODES = {
     
-    "ca": "reverse",
-
+    
     "youtube": "reverse",
     
    
