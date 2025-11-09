@@ -289,7 +289,19 @@ def stream_worker_radio(name):
 
             ytdlp.stdout.close()
 
-            for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
+            # 🚦 Read and push data only while someone is listening
+            while True:
+                # If no active listener — stop streaming
+                if s.get("ACTIVE_LISTENERS", 0) == 0:
+                    logging.info(f"[{name}] 🛑 No listeners — stopping stream.")
+                    ffmpeg.kill()
+                    ytdlp.kill()
+                    break
+
+                chunk = ffmpeg.stdout.read(2048)
+                if not chunk:
+                    break
+
                 while len(s["QUEUE"]) >= MAX_QUEUE:
                     time.sleep(0.2)
                 s["QUEUE"].append(chunk)
