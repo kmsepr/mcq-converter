@@ -181,7 +181,7 @@ PLAYLISTS = {
 }
 
 PLAY_MODES = {
-    "kas_ranker": "reverse"
+    "kas_ranker": "reverse",
     
     "youtube": "reverse",
     
