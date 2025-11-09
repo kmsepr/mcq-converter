@@ -182,6 +182,8 @@ PLAYLISTS = {
 
 "talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
 
+"talent_degree": "https://youtube.com/playlist?list=PL5RD_h4gTSuSrVedF_W2VmUr1QyRYJcn3",
+
 }
 
 PLAY_MODES = {
