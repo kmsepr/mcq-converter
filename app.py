@@ -170,34 +170,22 @@ logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
     "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbuZsS_2u5H_z6oOKDQT1NRZ",
-   
-
-  
-"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-
-"youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
-
-"mediaone": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
-
-
-
+    "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
+    "youtube": "https://youtube.com/playlist?list=PLYKzjRvMAycik6KyPflN03WxNwF2usRIk",
+    "mediaone": "https://youtube.com/playlist?list=PLbxxYekfzaHtlApTVOlwJDQJsdatrgSBi",
 }
 
+# 🧭 All playlists will now play latest → oldest
 PLAY_MODES = {
     "kas_ranker": "reverse",
     "ca": "reverse",
-
     "youtube": "reverse",
-    "mediaone": "normal",
-    
-   
-    
-    
+    "mediaone": "reverse",
 }
 
 STREAMS_RADIO = {}
 MAX_QUEUE = 64
-REFRESH_INTERVAL = 600 # 10 min
+REFRESH_INTERVAL = 600  # 10 min refresh
 
 # ==============================================================
 # 🧩 Playlist Caching + Loader
@@ -219,17 +207,11 @@ def save_cache_radio(data):
 
 CACHE_RADIO = load_cache_radio()
 
-
 def get_playlist_ids(url):
     """Return list of YouTube video IDs from a playlist URL using yt-dlp."""
     try:
         cmd = [
-            "yt-dlp",
-            "--flat-playlist",
-            "--dump-single-json",
-            "--no-warnings",
-            "--quiet",
-            url
+            "yt-dlp", "--flat-playlist", "--dump-single-json", "--no-warnings", "--quiet", url
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
@@ -237,7 +219,6 @@ def get_playlist_ids(url):
     except Exception as e:
         logging.error(f"get_playlist_ids() failed for {url}: {e}")
         return []
-
 
 def load_playlist_ids_radio(name, url):
     """Load and cache YouTube playlist IDs with safe mode handling."""
@@ -253,7 +234,7 @@ def load_playlist_ids_radio(name, url):
         if mode == "shuffle":
             random.shuffle(ids)
         elif mode == "reverse":
-            ids.reverse()
+            ids.reverse()  # ✅ Latest first
 
         CACHE_RADIO[name] = ids
         save_cache_radio(CACHE_RADIO)
@@ -265,8 +246,8 @@ def load_playlist_ids_radio(name, url):
         return CACHE_RADIO.get(name, [])
 
 
-
-# ⚡ Ultra-Lightweight Radio Worker (Low CPU/RAM)
+# ==============================================================
+# ⚡ Lightweight Stream Worker
 # ==============================================================
 
 def stream_worker_radio(name):
@@ -282,10 +263,17 @@ def stream_worker_radio(name):
                 time.sleep(60)
                 continue
 
+            # 🔄 Refresh if reached end
+            if s["INDEX"] >= len(ids):
+                logging.info(f"[{name}] ♻️ Reached end — refreshing playlist...")
+                ids = load_playlist_ids_radio(name, PLAYLISTS[name])
+                s["IDS"] = ids
+                s["INDEX"] = 0
+
             vid = ids[s["INDEX"] % len(ids)]
             s["INDEX"] += 1
             url = f"https://www.youtube.com/watch?v={vid}"
-            logging.info(f"[{name}] ▶️ Now playing: {url}")
+            logging.info(f"[{name}] ▶️ Now playing latest: {url}")
 
             cmd = [
                 "yt-dlp", "-f", "bestaudio/best",
@@ -299,9 +287,8 @@ def stream_worker_radio(name):
                 "-ac", "1", "-ar", "22050", "-b:a", "32k", "-f", "mp3", "pipe:1"
             ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-            ytdlp.stdout.close()  # Allow yt-dlp to exit when ffmpeg closes
+            ytdlp.stdout.close()
 
-            # Stream directly — no big buffer
             for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
                 while len(s["QUEUE"]) >= MAX_QUEUE:
                     time.sleep(0.2)
@@ -338,53 +325,32 @@ a:hover{background:#0f0;color:#000}
 </body></html>"""
     return render_template_string(html, playlists=playlists)
 
-
 @app.route("/listen/<name>")
-def listen_radio(name):
-    if name not in PLAYLISTS:
+def listen_radio_download(name):
+    if name not in STREAMS_RADIO:
         abort(404)
-
-    # Reuse the same generator from /stream
-    ids = CACHE_RADIO.get(name)
-    if not ids:
-        ids = load_playlist_ids_radio(name, PLAYLISTS[name])
-    if not ids:
-        return "No videos found.", 404
-
-    s = STREAMS_RADIO.setdefault(name, {"INDEX": 0})
-    s["INDEX"] %= len(ids)
-
-    def next_video():
-        vid = ids[s["INDEX"] % len(ids)]
-        s["INDEX"] += 1
-        return f"https://www.youtube.com/watch?v={vid}"
-
-    def stream_next():
+    s = STREAMS_RADIO[name]
+    def gen():
         while True:
-            url = next_video()
-            logging.info(f"[{name}] ▶️ (download) {url}")
-            try:
-                ytdlp = subprocess.Popen([
-                    "yt-dlp", "-f", "bestaudio/best",
-                    "-o", "-", "--quiet", "--no-warnings", url
-                ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                ffmpeg = subprocess.Popen([
-                    "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
-                    "-ac", "1", "-ar", "22050", "-b:a", "40k", "-f", "mp3", "pipe:1"
-                ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                ytdlp.stdout.close()
-
-                for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
-                    yield chunk
-
-                ffmpeg.wait(timeout=2)
-                time.sleep(2)
-            except Exception as e:
-                logging.warning(f"[{name}] ⚠️ Listen stream error: {e}")
-                time.sleep(3)
-
+            if s["QUEUE"]:
+                yield s["QUEUE"].popleft()
+            else:
+                time.sleep(0.05)
     headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
-    return Response(stream_with_context(stream_next()), mimetype="audio/mpeg", headers=headers)
+    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
+
+@app.route("/stream/<name>")
+def stream_audio(name):
+    if name not in STREAMS_RADIO:
+        abort(404)
+    s = STREAMS_RADIO[name]
+    def gen():
+        while True:
+            if s["QUEUE"]:
+                yield s["QUEUE"].popleft()
+            else:
+                time.sleep(0.05)
+    return Response(stream_with_context(gen()), mimetype="audio/mpeg")
 
 def cache_refresher():
     while True:
@@ -395,7 +361,6 @@ def cache_refresher():
                 STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
                 STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
         time.sleep(600)
-
 
 # ==============================================================
 # 🚀 START SERVER
@@ -411,7 +376,6 @@ if __name__ == "__main__":
         }
         threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True).start()
 
-    # ✅ Start cache refresher thread properly
     threading.Thread(target=cache_refresher, daemon=True).start()
 
     logging.info("🚀 Unified Flask App (Radio + MCQ Converter) running at http://0.0.0.0:8000")
