@@ -180,6 +180,8 @@ PLAYLISTS = {
 
 "jr": "https://youtube.com/playlist?list=PL7zZM6gm86jx6pR01WJL8jQ5wKIkndRMD",
 
+"talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
+
 }
 
 PLAY_MODES = {
