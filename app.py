@@ -221,7 +221,7 @@ CACHE_RADIO = load_cache_radio()
 
 
 def get_playlist_ids(url):
-    """Return list of YouTube video IDs from a playlist URL using yt-dlp."""
+    """Return list of YouTube video IDs from a playlist URL sorted by latest upload date."""
     try:
         cmd = [
             "yt-dlp",
@@ -233,7 +233,13 @@ def get_playlist_ids(url):
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
-        return [entry["id"] for entry in data.get("entries", []) if "id" in entry]
+
+        entries = [e for e in data.get("entries", []) if "id" in e]
+
+        # 🔹 Sort by upload date descending (latest first)
+        entries.sort(key=lambda e: e.get("upload_date", ""), reverse=True)
+
+        return [entry["id"] for entry in entries]
     except Exception as e:
         logging.error(f"get_playlist_ids() failed for {url}: {e}")
         return []
