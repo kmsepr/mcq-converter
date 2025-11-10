@@ -182,7 +182,6 @@ PLAYLISTS = {
 
 "talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
 
-"std10": "https://youtube.com/playlist?list=PLFMb-2_G0bMZMOWz-RvR9dk2Sj0UUnQTZ",
 
 
 }
