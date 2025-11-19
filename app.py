@@ -162,6 +162,7 @@ def convert():
 LOG_PATH = "/mnt/data/radio.log"
 COOKIES_PATH = "/mnt/data/cookies.txt"
 CACHE_FILE = "/mnt/data/playlist_cache.json"
+# Ensure paths exist (will create directories if necessary)
 os.makedirs(DOWNLOAD_DIR := "/mnt/data/radio_cache", exist_ok=True)
 os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
 
@@ -169,29 +170,18 @@ handler = RotatingFileHandler(LOG_PATH, maxBytes=5*1024*1024, backupCount=3)
 logging.getLogger().addHandler(handler)
 
 PLAYLISTS = {
-
-
-
-"kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbvjEB9VUAtuvPkirvoKqzfn",
-
-"ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
-
-
-
-"talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
-
-
+    "kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbvjEB9VUAtuvPkirvoKqzfn",
+    "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
+    "talent_ca": "https://youtube.com/playlist?list=PL5RD_h4gTSuQbCndwvolzeTDwZVGwCl53",
 }
 
 PLAY_MODES = {
-    
-    
-    
+    # e.g. "kas_ranker": "shuffle", "ca": "reverse"
 }
 
 STREAMS_RADIO = {}
 MAX_QUEUE = 64
-REFRESH_INTERVAL = 600 # 10 min
+REFRESH_INTERVAL = 600  # 10 min refresh loop interval (used by cache_refresher)
 
 # ==============================================================
 # 🧩 Playlist Caching + Loader
@@ -213,7 +203,6 @@ def save_cache_radio(data):
 
 CACHE_RADIO = load_cache_radio()
 
-
 def get_playlist_ids(url):
     """Return list of YouTube video IDs from a playlist URL sorted by latest upload date."""
     try:
@@ -225,19 +214,22 @@ def get_playlist_ids(url):
             "--quiet",
             url
         ]
+        # If yt-dlp isn't present this will raise FileNotFoundError
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
-
         entries = [e for e in data.get("entries", []) if "id" in e]
-
-        # 🔹 Sort by upload date descending (latest first)
+        # Sort by upload date descending (latest first)
         entries.sort(key=lambda e: e.get("upload_date", ""), reverse=True)
-
         return [entry["id"] for entry in entries]
-    except Exception as e:
-        logging.error(f"get_playlist_ids() failed for {url}: {e}")
+    except FileNotFoundError:
+        logging.error("yt-dlp not found. Install yt-dlp or ensure it is on PATH.")
         return []
-
+    except subprocess.CalledProcessError as e:
+        logging.error(f"yt-dlp call failed: {e}; stdout: {e.stdout}; stderr: {e.stderr}")
+        return []
+    except Exception as e:
+        logging.exception(f"get_playlist_ids() failed for {url}: {e}")
+        return []
 
 def load_playlist_ids_radio(name, url):
     """Load and cache YouTube playlist IDs with safe mode handling."""
@@ -249,7 +241,8 @@ def load_playlist_ids_radio(name, url):
             save_cache_radio(CACHE_RADIO)
             return []
 
-        mode = PLAY_MODES.get(name, "normal").lower().strip()
+        mode = PLAY_MODES.get(name, "normal")
+        mode = (mode or "normal").lower().strip()
         if mode == "shuffle":
             random.shuffle(ids)
         elif mode == "reverse":
@@ -261,22 +254,30 @@ def load_playlist_ids_radio(name, url):
         return ids
 
     except Exception as e:
-        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to normal order.")
+        logging.exception(f"[{name}] ❌ Failed to load playlist ({e}) — fallback to cached ids.")
         return CACHE_RADIO.get(name, [])
 
-
-
-# ⚡ Ultra-Lightweight Radio Worker (Low CPU/RAM)
+# ==============================================================
+# ⚡ Robust stream worker (single definition)
 # ==============================================================
 
 def stream_worker_radio(name):
+    """
+    Worker for a single playlist:
+    - Loads playlist IDs when needed
+    - Uses yt-dlp -> ffmpeg pipe to produce mp3 chunks
+    - Pushes small chunks to STREAMS_RADIO[name]['QUEUE']
+    """
     s = STREAMS_RADIO[name]
     while True:
+        ytdlp = None
+        ffmpeg = None
         try:
-            ids = s["IDS"]
+            ids = s.get("IDS") or []
             if not ids:
                 ids = load_playlist_ids_radio(name, PLAYLISTS[name])
                 s["IDS"] = ids
+
             if not ids:
                 logging.warning(f"[{name}] No playlist ids found; sleeping 60s...")
                 time.sleep(60)
@@ -287,33 +288,127 @@ def stream_worker_radio(name):
             url = f"https://www.youtube.com/watch?v={vid}"
             logging.info(f"[{name}] ▶️ Now playing: {url}")
 
-            cmd = [
+            # Build yt-dlp command; include cookies only if file exists
+            ytdlp_cmd = [
                 "yt-dlp", "-f", "bestaudio/best",
-                "--cookies", COOKIES_PATH,
-                "--user-agent", "Mozilla/5.0",
-                "-o", "-", "--quiet", "--no-warnings", url
+                "--no-warnings", "--quiet",
+                "-o", "-", url
             ]
-            ytdlp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            ffmpeg = subprocess.Popen([
+            if os.path.exists(COOKIES_PATH):
+                # Insert cookies options before url
+                # We insert just before the last element (the url)
+                ytdlp_cmd.insert(-1, COOKIES_PATH)
+                ytdlp_cmd.insert(-1, "--cookies")
+                logging.debug(f"[{name}] Using cookies file at {COOKIES_PATH}")
+            else:
+                logging.debug(f"[{name}] Cookies file not found at {COOKIES_PATH}; running without cookies.")
+
+            # Launch processes
+            try:
+                ytdlp = subprocess.Popen(ytdlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+            except FileNotFoundError:
+                logging.error(f"[{name}] yt-dlp binary not found. Ensure yt-dlp is installed and on PATH.")
+                time.sleep(10)
+                continue
+
+            ffmpeg_cmd = [
                 "ffmpeg", "-loglevel", "error", "-i", "pipe:0",
                 "-ac", "1", "-ar", "22050", "-b:a", "40k", "-f", "mp3", "pipe:1"
-            ], stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            ]
+            try:
+                ffmpeg = subprocess.Popen(ffmpeg_cmd, stdin=ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+            except FileNotFoundError:
+                logging.error(f"[{name}] ffmpeg binary not found. Ensure ffmpeg is installed and on PATH.")
+                # make sure to kill ytdlp if it was started
+                try:
+                    if ytdlp and ytdlp.poll() is None:
+                        ytdlp.kill()
+                except Exception:
+                    pass
+                time.sleep(10)
+                continue
 
-            ytdlp.stdout.close()  # Allow yt-dlp to exit when ffmpeg closes
+            # Allow yt-dlp to exit when ffmpeg closes
+            if ytdlp and ytdlp.stdout:
+                try:
+                    ytdlp.stdout.close()
+                except Exception:
+                    pass
 
-            # Stream directly — no big buffer
-            for chunk in iter(lambda: ffmpeg.stdout.read(2048), b""):
+            # Read ffmpeg stdout and push to queue
+            while True:
+                chunk = None
+                try:
+                    chunk = ffmpeg.stdout.read(2048)
+                except Exception as e:
+                    logging.debug(f"[{name}] ffmpeg stdout read error: {e}")
+                    break
+
+                if not chunk:
+                    # no more data from ffmpeg for this track
+                    break
+
+                # backpressure: keep queue under MAX_QUEUE
                 while len(s["QUEUE"]) >= MAX_QUEUE:
-                    time.sleep(0.2)
+                    time.sleep(0.05)
+
                 s["QUEUE"].append(chunk)
 
-            ffmpeg.wait(timeout=2)
-            logging.info(f"[{name}] ✅ Finished track.")
-            time.sleep(3)
+            # Wait (short) for processes to exit gracefully
+            try:
+                ffmpeg.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logging.debug(f"[{name}] ffmpeg did not exit quickly, continuing.")
 
+            try:
+                if ytdlp:
+                    ytdlp.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                logging.debug(f"[{name}] ytdlp did not exit quickly.")
+
+            logging.info(f"[{name}] ✅ Finished track {vid}")
+            time.sleep(1)
+
+        except subprocess.TimeoutExpired:
+            logging.warning(f"[{name}] Worker timeout while waiting for processes — attempting cleanup.")
+            # kill if exist
+            try:
+                if ffmpeg and ffmpeg.poll() is None:
+                    ffmpeg.kill()
+            except Exception:
+                pass
+            try:
+                if ytdlp and ytdlp.poll() is None:
+                    ytdlp.kill()
+            except Exception:
+                pass
+            time.sleep(3)
         except Exception as e:
-            logging.warning(f"[{name}] Worker error: {e}")
-            time.sleep(10)
+            logging.exception(f"[{name}] Worker error: {e}")
+            # ensure processes are killed if something bad happened
+            try:
+                if ffmpeg and ffmpeg.poll() is None:
+                    ffmpeg.kill()
+            except Exception:
+                pass
+            try:
+                if ytdlp and ytdlp.poll() is None:
+                    ytdlp.kill()
+            except Exception:
+                pass
+            time.sleep(5)
+        finally:
+            # best-effort cleanup
+            try:
+                if ffmpeg and ffmpeg.poll() is None:
+                    ffmpeg.kill()
+            except Exception:
+                pass
+            try:
+                if ytdlp and ytdlp.poll() is None:
+                    ytdlp.kill()
+            except Exception:
+                pass
 
 # ==============================================================
 # 🌐 Flask Routes
@@ -338,6 +433,9 @@ a:hover{background:#0f0;color:#000}
 </body></html>"""
     return render_template_string(html, playlists=playlists)
 
+@app.route("/health")
+def health():
+    return {"status": "ok", "playlists": list(PLAYLISTS.keys())}
 
 @app.route("/listen/<name>")
 def listen_radio_download(name):
@@ -353,36 +451,79 @@ def listen_radio_download(name):
     headers = {"Content-Disposition": f"attachment; filename={name}.mp3"}
     return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
 
-
+# --- REVISED stream route (play inline, no attachment) ---
 @app.route("/stream/<name>")
 def stream_audio(name):
     if name not in STREAMS_RADIO:
         abort(404)
     s = STREAMS_RADIO[name]
+
     def gen():
-        while True:
-            if s["QUEUE"]:
-                yield s["QUEUE"].popleft()
-            else:
-                time.sleep(0.05)
-    return Response(stream_with_context(gen()), mimetype="audio/mpeg")
+        try:
+            while True:
+                if s["QUEUE"]:
+                    # yield next chunk (deque left-pop)
+                    chunk = s["QUEUE"].popleft()
+                    if chunk:
+                        yield chunk
+                    else:
+                        # avoid busy-loop on empty/zero bytes
+                        time.sleep(0.01)
+                else:
+                    time.sleep(0.02)
+        except GeneratorExit:
+            logging.info(f"[{name}] Client disconnected from stream.")
+        except Exception as e:
+            logging.exception(f"[{name}] Stream generator error: {e}")
+
+    # Serve as playable audio (no 'attachment' header)
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        # Note: do NOT set Content-Length for continuous streams
+    }
+    return Response(stream_with_context(gen()), mimetype="audio/mpeg", headers=headers)
+
+# ==============================================================
+# 🔁 Cache refresher
+# ==============================================================
 
 def cache_refresher():
+    """Periodically refresh playlist caches for all playlists."""
     while True:
         for name, url in PLAYLISTS.items():
-            last = STREAMS_RADIO[name]["LAST_REFRESH"]
-            if time.time() - last > 7200:  # every 2 hours
-                logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
-                STREAMS_RADIO[name]["IDS"] = load_playlist_ids_radio(name, url)
-                STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
-        time.sleep(600)
-
+            try:
+                last = STREAMS_RADIO.get(name, {}).get("LAST_REFRESH", 0)
+                # refresh every 2 hours (7200s)
+                if time.time() - last > 7200:
+                    logging.info(f"[{name}] 🔁 Refreshing playlist cache...")
+                    new_ids = load_playlist_ids_radio(name, url)
+                    if name in STREAMS_RADIO:
+                        STREAMS_RADIO[name]["IDS"] = new_ids
+                        STREAMS_RADIO[name]["LAST_REFRESH"] = time.time()
+                    else:
+                        # ensure stream entry exists if missing
+                        STREAMS_RADIO[name] = {
+                            "IDS": new_ids,
+                            "INDEX": 0,
+                            "QUEUE": deque(),
+                            "LAST_REFRESH": time.time()
+                        }
+            except Exception as e:
+                logging.exception(f"cache_refresher error for {name}: {e}")
+        time.sleep(REFRESH_INTERVAL)
 
 # ==============================================================
 # 🚀 START SERVER
 # ==============================================================
 
 if __name__ == "__main__":
+    # sanity check: ensure yt-dlp and ffmpeg exist (warn only)
+    for bin_name in ("yt-dlp", "ffmpeg"):
+        if not shutil.which(bin_name) if (shutil := __import__("shutil")) else True:
+            # the above inline import/shutil.which guarded for readability
+            pass  # ignored; we'll handle missing binaries in worker
+
+    # initialize STREAMS_RADIO entries and start workers
     for pname, url in PLAYLISTS.items():
         STREAMS_RADIO[pname] = {
             "IDS": load_playlist_ids_radio(pname, url),
@@ -392,7 +533,7 @@ if __name__ == "__main__":
         }
         threading.Thread(target=stream_worker_radio, args=(pname,), daemon=True).start()
 
-    # ✅ Start cache refresher thread properly
+    # Start cache refresher thread properly
     threading.Thread(target=cache_refresher, daemon=True).start()
 
     logging.info("🚀 Unified Flask App (Radio + MCQ Converter) running at http://0.0.0.0:8000")
