@@ -172,7 +172,7 @@ PLAYLISTS = {
 
 
 
-"kas_ranker": "https://youtube.com/playlist?list=PLS2N6hORhZbvjEB9VUAtuvPkirvoKqzfn",
+
 
 "ca": "https://youtube.com/playlist?list=PLYKzjRvMAyci_W5xYyIXHBoR63eefUadL",
 
