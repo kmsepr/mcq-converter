@@ -1,4 +1,7 @@
-flask
+Flask
 pandas
 openpyxl
-yt-dlp
+ebooklib
+beautifulsoup4
+lxml
+requests
